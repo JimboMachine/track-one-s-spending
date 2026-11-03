@@ -47,7 +47,7 @@ const inMonth = (list, d) => { const k = monthKey(d); return list.filter(e => e.
 
 // ---------- 統計輔助 ----------
 function streak() {
-  const days = new Set(entries().map(e => localDay(e.createdAt)));
+  const days = new Set(entries().filter(e => !e.sample).map(e => localDay(e.createdAt)));
   const d = new Date();
   if (!days.has(toISO(d))) d.setDate(d.getDate() - 1);
   let n = 0;
@@ -97,7 +97,7 @@ function buildCheer(added, before) {
   else if (added.length > 1) main = `一次記好 ${added.length} 筆，效率滿分 ⚡`;
   else if (firstToday && st >= 2) main = `連續第 ${st} 天記帳 🔥 繼續保持！`;
   else if (cheaper) main = `比平常的「${one.note}」少花 ${money(cheaper)} 👍`;
-  else main = pickGeneric();
+  else main = pickGeneric(S.getProfile().name);
 
   const cm = monthKey(new Date());
   const hasExpThisMonth = added.some(e => e.type === 'expense' && e.date.startsWith(cm));
@@ -148,14 +148,14 @@ function groupHTML(g, isLast) {
     </div>`;
   if (isFresh && state.fresh.cheer) {
     const c = state.fresh.cheer;
-    h += `<div class="cheer${fresh ? ' enter-late' : ''}"><strong>${esc(c.main)}</strong>${isLast ? '<button class="undo" type="button" data-act="undo">撤銷</button>' : ''}${c.sub ? `<span class="sub">${esc(c.sub)}</span>` : ''}</div>`;
+    h += `<div class="cheer${fresh ? ' enter-late' : ''}"><strong>${esc(c.main)}</strong>${isLast ? '<button class="undo" type="button" data-act="undo">撤銷</button>' : ''}${c.sub ? `<span class="sub">${esc(c.sub)}</span>` : ''}${c.badges ? `<span class="sub">🏅 解鎖徽章：${esc(c.badges.join('、'))} <button class="linkish" type="button" data-go="settings">去看看</button></span>` : ''}</div>`;
   }
   return h + '</div></div>';
 }
 
 function welcomeHTML() {
   return `<div class="msg-bot enter"><div class="bot-ava" aria-hidden="true">記</div><div class="bot-col"><div class="bot-text">
-    <p><b>${greeting()}</b> 我是你的記帳小幫手。</p>
+    <p><b>${greeting(S.getProfile().name)}</b> 我是你的記帳小幫手。</p>
     <p>直接打一句話就記好了，金額、日期、分類都交給我。點一個例子試試看：</p>
     <div class="ex">
       <button class="chip" type="button" data-try="午餐 120">🍜 午餐 120</button>
@@ -271,7 +271,7 @@ function updatePreview() {
   if (!t) {
     const n = createdToday();
     const spent = sum(entries().filter(e => e.date === todayISO()), 'expense');
-    preview.innerHTML = n ? `<span>今天已記 ${n} 筆 · 支出 ${money(spent)}，做得好 ✨</span>` : `<span>${greeting()} 今天記第一筆吧</span>`;
+    preview.innerHTML = n ? `<span>今天已記 ${n} 筆 · 支出 ${money(spent)}，做得好 ✨</span>` : `<span>${greeting(S.getProfile().name)}，今天記第一筆吧</span>`;
     return;
   }
   const r = parseMessage(t, { learned: S.getLearned() });
@@ -318,6 +318,8 @@ function submit() {
     const before = snapshot();
     const added = S.addEntries(parsed, text);
     const cheer = buildCheer(added, before);
+    const freshBadges = checkBadges();
+    if (freshBadges.length) { cheer.badges = freshBadges.map(b => `${b.icon} ${b.name}`); cheer.celebrate = 'big'; }
     state.fresh = { msgId: added[0].msgId, cheer };
     input.value = '';
     updatePreview();
@@ -347,7 +349,7 @@ function submit() {
 
 function helpReply(hello = false) {
   const userText = input.dataset.last || null;
-  botSay(`${hello ? `<p><b>${greeting()}</b> 有什麼要記的嗎？</p>` : ''}
+  botSay(`${hello ? `<p><b>${greeting(S.getProfile().name)}</b> 有什麼要記的嗎？</p>` : ''}
     <p>這些寫法我都看得懂：</p>
     <div class="ex">
       <button class="chip" type="button" data-try="午餐 120">午餐 120</button>
@@ -460,6 +462,7 @@ form.addEventListener('submit', ev => {
   closeEdit();
   haptic(12);
   toast(msg, { icon: '✨' });
+  celebrateBadges(checkBadges(), 1500);
   setTimeout(() => { state.flash = null; }, 800);
 });
 $('#e-del').addEventListener('click', () => {
@@ -470,21 +473,21 @@ $('#e-del').addEventListener('click', () => {
   toast(`已刪除「${copy.note}」`, { icon: '🗑️', action: '復原', onAction: () => { S.restoreEntries([copy]); toast('已復原 ✓'); } });
 });
 $('#sheet-close').addEventListener('click', closeEdit);
-backdrop.addEventListener('click', closeEdit);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.editing) closeEdit(); });
+backdrop.addEventListener('click', () => { if (state.editing) closeEdit(); closeProfile(false); });
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (state.editing) closeEdit(); closeProfile(false); });
 // 下滑關閉
-(() => {
+function enableSwipe(sh, onClose) {
   let y0 = null, dy = 0;
-  const start = e => { if (sheet.scrollTop > 0) return; y0 = e.touches ? e.touches[0].clientY : e.clientY; dy = 0; sheet.style.transition = 'none'; };
-  const move = e => { if (y0 == null) return; dy = Math.max(0, (e.touches ? e.touches[0].clientY : e.clientY) - y0); sheet.style.transform = `translate(-50%, ${dy}px)`; };
-  const end = () => { if (y0 == null) return; sheet.style.transition = ''; y0 = null; if (dy > 90) closeEdit(); else sheet.style.transform = ''; };
-  const grab = $('.sheet-head', sheet).parentElement.querySelector('.grab');
-  [grab, $('.sheet-head', sheet)].forEach(el => {
+  const start = e => { if (sh.scrollTop > 0) return; y0 = e.touches[0].clientY; dy = 0; sh.style.transition = 'none'; };
+  const move = e => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); sh.style.transform = `translate(-50%, ${dy}px)`; };
+  const end = () => { if (y0 == null) return; sh.style.transition = ''; y0 = null; if (dy > 90) onClose(); else sh.style.transform = ''; };
+  [$('.grab', sh), $('.sheet-head', sh)].forEach(el => {
     el.addEventListener('touchstart', start, { passive: true });
     el.addEventListener('touchmove', move, { passive: true });
     el.addEventListener('touchend', end);
   });
-})();
+}
+enableSwipe(sheet, closeEdit);
 
 // ---------- 圖表頁 ----------
 function renderStats(animate = state.animateStats) {
@@ -744,7 +747,7 @@ function renderInstall() {
 }
 
 // ---------- 對話框 ----------
-function dialog({ title, body, ok = '確定', cancel = '取消', danger = false, extra = '', onOk }) {
+function dialog({ title, body, ok = '確定', cancel = '取消', danger = false, extra = '', onOk, onOpen }) {
   return new Promise(res => {
     const w = document.createElement('div');
     w.className = 'dialog-wrap';
@@ -757,6 +760,7 @@ function dialog({ title, body, ok = '確定', cancel = '取消', danger = false,
       else if (e.target === w) done(false);
     });
     document.body.appendChild(w);
+    if (onOpen) onOpen(w, done);
     $('[data-r="1"]', w).focus();
   });
 }
@@ -843,9 +847,410 @@ async function doExport() {
   toast(`已匯出 ${n} 筆紀錄，資料安全 +1`, { icon: '📁' });
 }
 
+// ---------- 我的：個人頁 ----------
+const ACCENTS = [
+  { id: 'jade', name: '翡翠', c: '#0a8a65' }, { id: 'ocean', name: '海洋', c: '#1f6fd1' }, { id: 'sakura', name: '櫻花', c: '#c93d72' },
+  { id: 'sunset', name: '夕陽', c: '#bf550b' }, { id: 'lavender', name: '薰衣草', c: '#6a4fd0' }, { id: 'ink', name: '墨黑', c: '#2b3038' },
+];
+const COVERS = [{ id: 'aurora', name: '極光' }, { id: 'ledger', name: '帳本' }, { id: 'dots', name: '圓點' }, { id: 'stripes', name: '斜紋' }, { id: 'plain', name: '純色' }];
+const AVATAR_EMOJI = ['🐻', '🐱', '🐶', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸', '🐧', '🦄', '🐳', '🌻', '🍀', '⭐', '😎'];
+const PERSON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+const isPhoto = v => typeof v === 'string' && /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(v);
+
+function avatarHTML(p, fallback = 'icon') {
+  const a = p.avatar;
+  if (a && a.kind === 'photo' && isPhoto(a.value)) return `<img src="${a.value}" alt="">`;
+  if (a && a.kind === 'emoji' && a.value) return esc(a.value);
+  if (p.name) return esc([...p.name.trim()][0] || '🙂');
+  return fallback === 'icon' ? PERSON_SVG : '🙂';
+}
+
+let themeOwned = false, lastTheme = '';
+function applyTheme(p = S.getProfile()) {
+  const key = `${p.accent}|${p.mode}`;
+  if (key === lastTheme) return;
+  lastTheme = key;
+  const root = document.documentElement;
+  if (p.accent && p.accent !== 'jade') root.dataset.accent = p.accent; else delete root.dataset.accent;
+  if (p.mode === 'light' || p.mode === 'dark') { root.dataset.theme = p.mode; themeOwned = true; }
+  else if (themeOwned) { delete root.dataset.theme; themeOwned = false; }
+  requestAnimationFrame(() => {
+    const c = getComputedStyle(document.body).getPropertyValue('--surface').trim();
+    if (c) $$('meta[name="theme-color"]').forEach(m => m.setAttribute('content', c));
+  });
+}
+
+function longestRun(sortedDays) {
+  let best = 0, run = 0, prev = null;
+  for (const d of sortedDays) {
+    run = prev && Math.round((fromISO(d) - fromISO(prev)) / 864e5) === 1 ? run + 1 : 1;
+    best = Math.max(best, run); prev = d;
+  }
+  return best;
+}
+function runUntilToday(daySet) {
+  const d = new Date();
+  if (!daySet.has(toISO(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (daySet.has(toISO(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+
+function goalProgress() {
+  const g = S.getProfile().goal;
+  if (!g || !(g.amount > 0)) return null;
+  const net = entries().filter(e => !e.sample && e.date >= (g.start || '0000-00-00'))
+    .reduce((s, e) => s + (e.type === 'income' ? e.amount : -e.amount), 0);
+  const saved = Math.max(0, (g.base || 0) + net);
+  return { ...g, saved, pct: Math.min(100, Math.floor(saved / g.amount * 100)), left: Math.max(0, g.amount - saved) };
+}
+
+function personalStats() {
+  const list = entries().filter(e => !e.sample);
+  const days = [...new Set(list.map(e => localDay(e.createdAt)))].sort();
+  const first = days[0] || null;
+  let noSpend = 0;
+  if (first) {
+    const spentDays = new Set(list.filter(e => e.type === 'expense').map(e => e.date));
+    const d = fromISO(first), end = fromISO(todayISO());
+    while (d < end) { if (!spentDays.has(toISO(d))) noSpend++; d.setDate(d.getDate() + 1); }
+  }
+  const months = {};
+  list.forEach(e => {
+    const m = months[e.date.slice(0, 7)] = months[e.date.slice(0, 7)] || { inc: 0, exp: 0, n: 0 };
+    m[e.type === 'income' ? 'inc' : 'exp'] += e.amount; m.n++;
+  });
+  const cur = monthKey(new Date());
+  const budget = S.getSettings().budget;
+  const p = S.getProfile();
+  const g = goalProgress();
+  return {
+    total: list.length, days: days.length, longest: longestRun(days), first, noSpend,
+    budgetSet: budget > 0,
+    budgetKept: budget > 0 && Object.entries(months).some(([k, m]) => k < cur && m.n >= 10 && m.exp <= budget),
+    saver: Object.values(months).some(m => m.inc > 0 && m.n >= 5 && (m.inc - m.exp) / m.inc >= 0.2),
+    taught: Object.keys(S.getLearned()).length,
+    goalSet: !!g, goalPct: g ? g.pct : 0, goalDone: !!g && g.pct >= 100,
+    profileDone: !!(p.name && p.avatar),
+    loveLongest: longestRun([...new Set(S.getLove().map(n => n.date))].sort()),
+  };
+}
+
+const BADGES = [
+  { id: 'profile', icon: '✨', name: '有型有款', desc: '設定暱稱和頭像', ok: s => s.profileDone, prog: () => '去布置' },
+  { id: 'first', icon: '🌱', name: '第一步', desc: '記下第一筆帳', ok: s => s.total >= 1, prog: () => '0/1' },
+  { id: 'streak3', icon: '🔥', name: '連續 3 天', desc: '連續 3 天都有記帳', ok: s => s.longest >= 3, prog: s => `${s.longest}/3` },
+  { id: 'streak7', icon: '⚡', name: '一週不間斷', desc: '連續 7 天都有記帳', ok: s => s.longest >= 7, prog: s => `${s.longest}/7` },
+  { id: 'streak30', icon: '🏅', name: '30 天達人', desc: '連續 30 天都有記帳', ok: s => s.longest >= 30, prog: s => `${s.longest}/30` },
+  { id: 'count100', icon: '📒', name: '百筆紀錄', desc: '累積 100 筆紀錄', ok: s => s.total >= 100, prog: s => `${s.total}/100` },
+  { id: 'nospend', icon: '🍃', name: '無支出日', desc: '累積 5 天完全沒花錢', ok: s => s.noSpend >= 5, prog: s => `${s.noSpend}/5` },
+  { id: 'budget', icon: '🎯', name: '守住預算', desc: '有一整個月花費都在預算內', ok: s => s.budgetKept, prog: s => (s.budgetSet ? '月底結算' : '先設預算') },
+  { id: 'saver', icon: '💰', name: '存錢高手', desc: '某個月存下收入的兩成以上', ok: s => s.saver, prog: () => '加油' },
+  { id: 'teacher', icon: '🧠', name: '調教小幫手', desc: '幫小幫手改正 3 次分類', ok: s => s.taught >= 3, prog: s => `${s.taught}/3` },
+  { id: 'goal', icon: '🚀', name: '夢想達成', desc: '完成一個存錢目標', ok: s => s.goalDone, prog: s => (s.goalSet ? `${s.goalPct}%` : '先設目標') },
+  { id: 'love7', icon: '💞', name: '情話一週', desc: '連續 7 天寫情話給她', ok: s => s.loveLongest >= 7, prog: s => `${s.loveLongest}/7` },
+];
+
+function checkBadges() {
+  const st = S.getSettings();
+  const have = new Set(st.badges || []);
+  const s = personalStats();
+  const fresh = BADGES.filter(b => !have.has(b.id) && b.ok(s));
+  if (fresh.length) {
+    const at = new Date().toISOString();
+    S.setSettings({
+      badges: [...have, ...fresh.map(b => b.id)],
+      badgeAt: { ...(st.badgeAt || {}), ...Object.fromEntries(fresh.map(b => [b.id, at])) },
+      badgeNew: [...new Set([...(st.badgeNew || []), ...fresh.map(b => b.id)])],
+    });
+  }
+  return fresh;
+}
+function celebrateBadges(list, delay = 0) {
+  if (!list.length) return;
+  setTimeout(() => {
+    const b = list[0];
+    toast(`解鎖徽章「${b.name}」${list.length > 1 ? `等 ${list.length} 個` : ''}`, { icon: b.icon, action: '去看看', onAction: () => setView('settings'), duration: 5000 });
+    confetti({ count: 120 }); haptic([18, 50, 18]);
+  }, delay);
+}
+
+function renderTabAva() {
+  $('#tab-ava').innerHTML = avatarHTML(S.getProfile(), 'icon');
+  $('#tab-dot').hidden = !(S.getSettings().badgeNew || []).length;
+}
+
+function renderMe(animate = false) {
+  const p = S.getProfile();
+  const s = personalStats();
+  const dayN = s.first ? Math.round((fromISO(todayISO()) - fromISO(s.first)) / 864e5) + 1 : 0;
+  $('#profile-card').innerHTML = `<div class="cover" data-cover="${esc(p.cover)}"><button class="cover-edit" type="button" data-act="edit-profile">✏️ 布置</button></div>
+    <div class="p-body">
+      <button class="p-ava-btn" type="button" data-act="edit-profile" aria-label="換頭像"><span class="avatar lg">${avatarHTML(p, 'smile')}</span><span class="cam" aria-hidden="true">📷</span></button>
+      <button type="button" class="p-name${p.name ? '' : ' p-empty'}" data-act="edit-profile">${p.name ? esc(p.name) : '幫自己取個暱稱吧'}</button>
+      <button type="button" class="p-bio${p.bio ? '' : ' p-empty'}" data-act="edit-profile">${p.bio ? esc(p.bio) : '寫一句給自己的話 ✨'}</button>
+      <div class="p-meta">${s.first ? `<span>記帳第 ${dayN} 天</span><span>${s.first.replace(/-/g, '/')} 開始</span>` : '<span>今天開始記帳吧 ✏️</span>'}</div>
+    </div>`;
+  const have = new Set(S.getSettings().badges || []);
+  $('#me-stats').innerHTML = [[s.days, '記帳天數'], [s.total, '總筆數'], [s.longest, '最長連續'], [`${have.size}/${BADGES.length}`, '徽章']]
+    .map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+  renderGoal(animate);
+  renderBadges(s, have);
+  renderLove();
+}
+
+function renderGoal(animate) {
+  const card = $('#goal-card');
+  const g = goalProgress();
+  if (!g) {
+    card.innerHTML = `<div class="card-head"><h2>🎯 存錢目標</h2></div>
+      <p class="note" style="margin:0 0 10px">定一個目標，例如「日本旅行 $60,000」，每記一筆都看得到離夢想多近。</p>
+      <button class="btn primary block" type="button" data-act="edit-goal">設定目標</button>`;
+    return;
+  }
+  const msg = g.pct >= 100 ? '目標達成！你做到了 🏆' : g.pct >= 75 ? '快到了，再加把勁 🔥' : g.pct >= 50 ? '過半了，太厲害了 🎉'
+    : g.pct >= 25 ? '穩穩前進中 💪' : g.saved > 0 ? '起步了，每一筆都算數 🌱' : '從今天開始，收入減支出都會算進來 🌱';
+  card.innerHTML = `<div class="card-head"><h2>🎯 ${esc(g.name || '存錢目標')}</h2><button class="btn ghost sm" type="button" data-act="edit-goal">編輯</button></div>
+    <div class="goal-nums"><span>已存 <b>${money(g.saved)}</b></span><span>目標 ${money(g.amount)} · ${g.pct}%</span></div>
+    <div class="goal-track" role="progressbar" aria-label="存錢目標進度" aria-valuenow="${g.pct}" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    <p class="goal-msg">${msg}${g.left > 0 ? ` 還差 ${money(g.left)}` : ''}</p>`;
+  const bar = $('.goal-track i', card);
+  if (animate) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = g.pct + '%'; }));
+  else { bar.style.transition = 'none'; bar.style.width = g.pct + '%'; }
+}
+
+function renderBadges(s, have) {
+  const fresh = new Set(S.getSettings().badgeNew || []);
+  $('#badge-card').innerHTML = `<div class="card-head"><h2>成就徽章</h2><span class="card-sub">${have.size} / ${BADGES.length}</span></div>
+    <div class="badges">${BADGES.map(b => {
+      const on = have.has(b.id);
+      return `<button class="badge ${on ? 'on' : 'off'}${on && fresh.has(b.id) ? ' new' : ''}" type="button" data-badge="${b.id}"><span class="b-ico" aria-hidden="true">${b.icon}</span><span class="b-name">${b.name}</span>${on ? '' : `<span class="b-prog">${b.prog(s)}</span>`}</button>`;
+    }).join('')}</div>`;
+}
+
+// ---------- 每日情話 ----------
+const loveStreak = () => runUntilToday(new Set(S.getLove().map(n => n.date)));
+let loveBuilt = false;
+function buildLoveCard() {
+  $('#love-card').innerHTML = `<div class="love-head"><h2>💌 每日情話</h2><span class="love-streak" id="love-streak" hidden></span></div>
+    <div id="love-today"></div>
+    <textarea class="love-input" id="love-input" maxlength="500" placeholder="今天想對她說什麼？" aria-label="寫給她的話"></textarea>
+    <div class="love-actions"><span class="love-count" id="love-count">0 / 500</span><button class="btn love" type="button" id="love-send" disabled>送給她 💌</button></div>
+    <div class="love-share" id="love-share"></div>
+    <div class="love-list" id="love-list"></div>`;
+  const ta = $('#love-input');
+  ta.value = state.loveDraft || '';
+  ta.addEventListener('input', () => {
+    state.loveDraft = ta.value;
+    $('#love-count').textContent = `${ta.value.length} / 500`;
+    $('#love-send').disabled = !ta.value.trim();
+  });
+  $('#love-send').addEventListener('click', sendLove);
+  loveBuilt = true;
+}
+
+function renderLove() {
+  if (!loveBuilt) buildLoveCard();
+  const notes = [...S.getLove()].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const t = todayISO();
+  const today = notes.filter(n => n.date === t);
+  const past = notes.filter(n => n.date !== t);
+  const st = loveStreak();
+  const sEl = $('#love-streak');
+  sEl.hidden = st < 1;
+  sEl.textContent = `💗 連續 ${st} 天`;
+  const shareOn = !!S.getShare();
+  const statusOf = n => (n.seenAt ? '<span class="li-seen">她看過了 ✓</span>' : (shareOn && n._synced ? '<span>還沒看</span>' : ''))
+    + (n.hearts ? `<span class="li-seen">❤️ ×${n.hearts}</span>` : '');
+  $('#love-today').innerHTML = today.map(n => `<button class="love-today" type="button" data-love="${n.id}">
+      <span class="lt-label">今天寫給她的 <span class="li-status">${statusOf(n)}</span></span><span class="lt-body">${esc(n.body)}</span></button>`).join('');
+  const ta = $('#love-input');
+  ta.placeholder = today.length ? '想再多說一句也可以 💗' : '今天想對她說什麼？';
+  $('#love-count').textContent = `${ta.value.length} / 500`;
+  $('#love-send').disabled = !ta.value.trim();
+  renderLoveShare();
+  const shown = state.loveShowAll ? past : past.slice(0, 5);
+  $('#love-list').innerHTML = past.length ? `<div class="love-list-title">寫過的話 · ${past.length} 則</div>`
+    + shown.map(n => `<button class="love-item" type="button" data-love="${n.id}"><span class="li-top"><span>${dayTitle(n.date)}</span><span class="li-status">${statusOf(n)}</span></span><span class="li-body">${esc(n.body)}</span></button>`).join('')
+    + (past.length > shown.length ? `<button class="load-more" type="button" data-act="love-all">看全部 ${past.length} 則</button>` : '') : '';
+}
+
+function renderLoveShare() {
+  const box = $('#love-share');
+  const c = S.cloud, share = S.getShare();
+  if (inFrame) {
+    box.innerHTML = '<p class="note">預覽版不能分享。放上你的網址並開啟雲端同步後，就能產生她的專屬連結。</p>';
+    return;
+  }
+  if (!c.user) {
+    box.innerHTML = `<p class="note">想讓她在自己的手機看到，先開啟下面的「雲端同步」並登入，就能產生一個只給她的專屬連結。</p>
+      <button class="btn ghost block" type="button" data-act="goto-cloud">前往雲端同步設定</button>`;
+    return;
+  }
+  const err = c.extraError ? `<p class="note" style="color:var(--danger)">⚠️ ${esc(c.extraError)}</p>` : '';
+  if (!share) {
+    box.innerHTML = err + `<p class="note">產生專屬連結傳給她，她不用下載也不用登入，打開就看得到你寫的話。她看不到你的帳。</p>
+      <button class="btn love block" type="button" data-act="love-share-on">💗 產生她的專屬連結</button>`;
+    return;
+  }
+  const link = S.shareLink(share.token);
+  box.innerHTML = err + `<div class="love-link"><span>${esc(link)}</span><button class="btn ghost sm" type="button" data-act="love-copy">複製</button></div>
+    <div class="row"><button class="btn love" type="button" data-act="love-send-link">傳給她</button><a class="btn ghost" href="https://line.me/R/share?text=${encodeURIComponent('給你的每日情話 💌\n' + link)}" target="_blank" rel="noopener">用 LINE 傳</a></div>
+    <div class="love-more"><button type="button" data-act="love-preview">預覽她看到的</button><button type="button" data-act="love-reset">換新連結</button><button type="button" data-act="love-share-off">停止分享</button></div>`;
+}
+
+function heartBurst(el) {
+  const cs = getComputedStyle(document.documentElement);
+  const r = el ? el.getBoundingClientRect() : null;
+  confetti({ count: 45, hearts: true, colors: [cs.getPropertyValue('--love').trim() || '#c93d72', '#ff8fb6', '#ffc2d6'], origin: r ? { x: r.left + r.width / 2, y: r.top } : undefined });
+}
+
+function sendLove() {
+  const ta = $('#love-input');
+  const body = ta.value.trim();
+  if (!body) return;
+  const before = loveStreak();
+  S.addLove(body, todayISO());
+  ta.value = ''; state.loveDraft = '';
+  const st = loveStreak();
+  haptic([12, 40, 12]);
+  heartBurst($('#love-send'));
+  let msg;
+  if ([3, 7, 14, 30, 100, 365].includes(st) && st > before) msg = `連續 ${st} 天寫情話，好浪漫 💞`;
+  else if (S.cloud.user && S.getShare()) msg = '送出了 💌 她打開連結就看得到';
+  else if (S.cloud.user) msg = '寫好了 💌 產生專屬連結就能傳給她';
+  else msg = '寫好了 💌 開啟雲端同步後，她就能用連結看到';
+  toast(msg, { icon: '💗' });
+  celebrateBadges(checkBadges(), 1200);
+}
+
+async function editLove(id) {
+  const n = S.getLove().find(x => x.id === id);
+  if (!n) return;
+  let removed = false, newBody = null;
+  const seen = n.seenAt ? `<p class="note" style="margin:0">她在 ${relDay(localDay(n.seenAt))} ${hhmm(n.seenAt)} 看過了${n.hearts ? `，還回了你 ❤️×${n.hearts}` : ''} 💗</p>` : '';
+  const ok = await dialog({
+    title: `${dayTitle(n.date)}的情話`, ok: '儲存',
+    extra: `<textarea class="love-input" id="love-edit" maxlength="500" aria-label="情話內容">${esc(n.body)}</textarea>${seen}<button type="button" class="linkish danger" id="love-del">刪除這則</button>`,
+    onOpen: (w, done) => { $('#love-del', w).addEventListener('click', () => { removed = true; done(false); }); },
+    onOk: w => { const v = $('#love-edit', w).value.trim(); if (!v) { $('#love-edit', w).focus(); return false; } newBody = v; },
+  });
+  if (removed) {
+    const copy = S.deleteLove(id);
+    haptic([10, 30, 10]);
+    toast('已刪除這則情話', { icon: '🗑️', action: '復原', onAction: () => { S.restoreLove(copy); toast('已復原 💗'); } });
+  } else if (ok && newBody && newBody !== n.body) {
+    S.updateLove(id, newBody);
+    haptic(12); toast('改好了 💗');
+  }
+}
+
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg, { icon: '📋' }); haptic(10); }
+  catch { await dialog({ title: '複製連結', body: '長按下面的連結，選「全選」再複製。', ok: '好', cancel: '', extra: `<textarea readonly class="love-input" style="min-height:90px;font-size:13px">${esc(text)}</textarea>` }); }
+}
+
+// ---------- 布置個人頁（底部表單） ----------
+const psheet = $('#psheet'), pform = $('#pform');
+let pdraft = null;
+function openProfile(focus) {
+  if (state.editing) closeEdit();
+  pdraft = JSON.parse(JSON.stringify(S.getProfile()));
+  $('#p-name').value = pdraft.name || '';
+  $('#p-bio').value = pdraft.bio || '';
+  const g = pdraft.goal || {};
+  $('#p-goal-name').value = g.name || '';
+  $('#p-goal-amt').value = g.amount || '';
+  $('#p-goal-base').value = g.base || '';
+  renderPSheet();
+  psheet.style.transform = '';
+  psheet.classList.add('show'); backdrop.classList.add('show');
+  psheet.scrollTop = 0;
+  haptic(6);
+  if (focus === 'goal') setTimeout(() => { $('#p-goal-name').scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#p-goal-name').focus({ preventScroll: true }); }, 380);
+}
+function renderPSheet() {
+  const p = pdraft;
+  $('#p-ava-preview').innerHTML = avatarHTML({ ...p, name: $('#p-name').value.trim() }, 'smile');
+  $('#p-photo-clear').hidden = !(p.avatar && p.avatar.kind === 'photo');
+  const cur = p.avatar && p.avatar.kind === 'emoji' ? p.avatar.value : null;
+  $('#p-emojis').innerHTML = AVATAR_EMOJI.map(e => `<button type="button" class="emo${e === cur ? ' on' : ''}" data-emo="${e}" role="radio" aria-checked="${e === cur}" aria-label="頭像 ${e}">${e}</button>`).join('');
+  $('#p-accents').innerHTML = ACCENTS.map(a => `<button type="button" class="sw-btn${a.id === p.accent ? ' on' : ''}" data-accent="${a.id}" role="radio" aria-checked="${a.id === p.accent}"><span class="sw-dot" style="background:${a.c}">${a.id === p.accent ? '✓' : ''}</span>${a.name}</button>`).join('');
+  $$('#p-mode button').forEach(b => b.classList.toggle('on', b.dataset.m === (p.mode || 'system')));
+  $('#p-covers').innerHTML = COVERS.map(c => `<button type="button" class="cv-btn${c.id === p.cover ? ' on' : ''}" data-cover="${c.id}" role="radio" aria-checked="${c.id === p.cover}"><span class="cover" data-cover="${c.id}"></span>${c.name}</button>`).join('');
+}
+function closeProfile(saved = false) {
+  if (!psheet.classList.contains('show')) return;
+  psheet.classList.remove('show'); backdrop.classList.remove('show'); psheet.style.transform = '';
+  if (!saved) { lastTheme = ''; applyTheme(S.getProfile()); }
+  pdraft = null;
+}
+function readPhoto(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const size = 256, c = document.createElement('canvas');
+      c.width = c.height = size;
+      const m = Math.min(img.naturalWidth, img.naturalHeight);
+      c.getContext('2d').drawImage(img, (img.naturalWidth - m) / 2, (img.naturalHeight - m) / 2, m, m, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('讀不到這張圖片，換一張試試')); };
+    img.src = url;
+  });
+}
+psheet.addEventListener('click', e => {
+  if (!pdraft) return;
+  const emo = e.target.closest('[data-emo]'), acc = e.target.closest('.sw-btn'), cov = e.target.closest('.cv-btn'), mode = e.target.closest('#p-mode button');
+  if (emo) pdraft.avatar = { kind: 'emoji', value: emo.dataset.emo };
+  else if (acc) { pdraft.accent = acc.dataset.accent; applyTheme(pdraft); }
+  else if (cov) pdraft.cover = cov.dataset.cover;
+  else if (mode) { pdraft.mode = mode.dataset.m; applyTheme(pdraft); }
+  else return;
+  haptic(6); renderPSheet();
+});
+$('#p-name').addEventListener('input', () => { if (pdraft) $('#p-ava-preview').innerHTML = avatarHTML({ ...pdraft, name: $('#p-name').value.trim() }, 'smile'); });
+$('#p-photo-btn').addEventListener('click', () => $('#p-photo').click());
+$('#p-photo').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || !pdraft) return;
+  try { pdraft.avatar = { kind: 'photo', value: await readPhoto(f) }; renderPSheet(); haptic(10); }
+  catch (err) { toast(err.message, { icon: '⚠️' }); }
+});
+$('#p-photo-clear').addEventListener('click', () => { if (pdraft) { pdraft.avatar = { kind: 'emoji', value: '🐻' }; renderPSheet(); } });
+$('#psheet-close').addEventListener('click', () => closeProfile(false));
+pform.addEventListener('submit', ev => {
+  ev.preventDefault();
+  if (!pdraft) return;
+  const was = S.getProfile();
+  pdraft.name = $('#p-name').value.trim().slice(0, 20);
+  pdraft.bio = $('#p-bio').value.trim().slice(0, 40);
+  const num = id => parseFloat(($(id).value || '').replace(/[,$\s]/g, ''));
+  const amt = num('#p-goal-amt'), base = num('#p-goal-base') || 0;
+  const gname = $('#p-goal-name').value.trim().slice(0, 16);
+  if (amt > 0) pdraft.goal = { name: gname || '存錢目標', amount: amt, base: Math.max(0, base), start: was.goal?.start || todayISO() };
+  else if (gname) {
+    const m = $('#p-goal-amt').closest('.money-input');
+    m.classList.remove('shake'); void m.offsetWidth; m.classList.add('shake');
+    $('#p-goal-amt').focus(); haptic([10, 40, 10]); toast('目標金額要填喔', { icon: '🎯' });
+    return;
+  } else pdraft.goal = null;
+  const name = pdraft.name;
+  S.setProfile(pdraft);
+  closeProfile(true);
+  haptic(12);
+  toast(!was.name && name ? `很高興認識你，${name}！👋` : '個人頁面更新好了 ✨', { icon: '🎨' });
+  confetti({ count: 60 });
+  celebrateBadges(checkBadges(), 1300);
+});
+
+enableSwipe(psheet, () => closeProfile(false));
+
 // ---------- 畫面切換 ----------
 const VIEWS = ['chat', 'stats', 'settings'];
-const TITLES = { chat: '隨手記帳', stats: '圖表', settings: '設定' };
+const TITLES = { chat: '隨手記帳', stats: '圖表', settings: '我的' };
 function setView(v) {
   if (!VIEWS.includes(v)) v = 'chat';
   const changed = v !== state.view;
@@ -858,7 +1263,11 @@ function setView(v) {
   $('#month-strip').hidden = v !== 'chat';
   $('#view-title').textContent = TITLES[v];
   if (v === 'stats') { if (changed) state.animateStats = true; renderStats(); $('#view-stats').scrollTop = changed ? 0 : $('#view-stats').scrollTop; }
-  if (v === 'settings') renderSettings(true);
+  if (v === 'settings') {
+    renderSettings(true); renderMe(changed);
+    if (changed) $('#view-settings').scrollTop = 0;
+    if ((S.getSettings().badgeNew || []).length) setTimeout(() => S.setSettings({ badgeNew: [] }), 2600);
+  }
   if (v === 'chat') renderChat(true);
   if (changed) haptic(5);
 }
@@ -869,10 +1278,12 @@ function scheduleRender() {
   renderQueued = true;
   requestAnimationFrame(() => {
     renderQueued = false;
+    if (!pdraft) applyTheme(S.getProfile()); // 布置中的主題預覽不要被蓋掉
+    renderTabAva();
     renderPill(); renderStrip(); updatePreview();
     if (state.view === 'chat') renderChat();
     if (state.view === 'stats') renderStats(false);
-    if (state.view === 'settings') renderSettings();
+    if (state.view === 'settings') { renderSettings(); renderMe(false); }
   });
 }
 
@@ -889,8 +1300,16 @@ $('#cat-seg').addEventListener('click', e => { const b = e.target.closest('butto
 
 // 統一處理各種 data-* 按鈕
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-edit],[data-try],[data-act],[data-go],.lg-row');
-  if (!t) return;
+  const t = e.target.closest('[data-edit],[data-try],[data-act],[data-go],[data-badge],[data-love],.lg-row');
+  if (!t || t.closest('.dialog-wrap')) return;
+  if (t.dataset.badge) {
+    const b = BADGES.find(x => x.id === t.dataset.badge);
+    const at = (S.getSettings().badgeAt || {})[b.id];
+    if ((S.getSettings().badges || []).includes(b.id)) toast(`${b.name}：${b.desc}${at ? `（${relDay(localDay(at))}解鎖）` : ''}`, { icon: b.icon });
+    else toast(`還沒解鎖「${b.name}」：${b.desc}`, { icon: '🔒' });
+    haptic(6); return;
+  }
+  if (t.dataset.love) { editLove(t.dataset.love); return; }
   if (t.dataset.edit) { openEdit(t.dataset.edit); return; }
   if (t.dataset.try) { if (state.view !== 'chat') setView('chat'); input.value = t.dataset.try; updatePreview(); input.focus(); haptic(6); return; }
   if (t.dataset.go) { setView(t.dataset.go); return; }
@@ -903,6 +1322,30 @@ document.addEventListener('click', async e => {
   }
   const act = t.dataset.act;
   if (act === 'more') { state.showCount += 60; renderChat(); }
+  else if (act === 'edit-profile') openProfile();
+  else if (act === 'edit-goal') openProfile('goal');
+  else if (act === 'love-all') { state.loveShowAll = true; renderLove(); }
+  else if (act === 'goto-cloud') { const c = $('#cloud-card'); c.scrollIntoView({ behavior: 'smooth', block: 'start' }); const d = $('details', c); if (d) d.open = true; }
+  else if (act === 'love-share-on' || act === 'love-reset') {
+    if (act === 'love-reset' && !(await dialog({ title: '換一個新連結？', body: '舊的連結會馬上失效，記得把新連結傳給她。', ok: '換新連結' }))) return;
+    try {
+      await S.enableShare(act === 'love-reset');
+      haptic([12, 40, 12]); heartBurst(t);
+      toast(act === 'love-reset' ? '新連結做好了，舊的已經失效' : '專屬連結做好了，傳給她吧 💌', { icon: '💗' });
+    } catch (err) { toast(err.message || String(err), { icon: '⚠️', duration: 5000 }); }
+  } else if (act === 'love-share-off') {
+    if (!(await dialog({ title: '停止分享？', body: '她的連結會失效，你寫的話會保留在這裡。之後可以再產生新連結。', ok: '停止分享', danger: true }))) return;
+    try { await S.disableShare(); toast('已停止分享'); } catch (err) { toast(err.message || String(err), { icon: '⚠️' }); }
+  } else if (act === 'love-copy') {
+    const sh = S.getShare(); if (sh) copyText(S.shareLink(sh.token), '連結複製好了，貼給她吧 💌');
+  } else if (act === 'love-send-link') {
+    const sh = S.getShare(); if (!sh) return;
+    const link = S.shareLink(sh.token);
+    if (navigator.share) { try { await navigator.share({ title: '給你的話', text: '給你的每日情話 💌', url: link }); haptic(10); } catch { /* 取消分享 */ } }
+    else copyText(link, '連結複製好了，貼給她吧 💌');
+  } else if (act === 'love-preview') {
+    const sh = S.getShare(); if (sh) window.open(S.shareLink(sh.token), '_blank', 'noopener');
+  }
   else if (act === 'undo') undoLast(false);
   else if (act === 'sample' || act === 'clear-sample') toggleSample();
   else if (act === 'clear-filter') { state.catFilter = null; renderDetail(inMonth(entries(), state.month)); }
@@ -954,7 +1397,7 @@ $('#import-file').addEventListener('change', async e => {
     const n = S.importCSV(await f.text());
     haptic(12);
     toast(n ? `匯入 ${n} 筆紀錄 ✓` : '檔案裡沒有找到紀錄', { icon: n ? '📥' : '🤔' });
-    if (n) confetti({ count: 60 });
+    if (n) { confetti({ count: 60 }); celebrateBadges(checkBadges(), 1200); }
   } catch (err) { toast('匯入失敗：' + err.message, { icon: '⚠️', duration: 5000 }); }
 });
 $('#sample-btn').addEventListener('click', toggleSample);
@@ -996,8 +1439,17 @@ S.onChange(() => {
     if (st === 'idle' && prevStatus === 'syncing' && !firstSyncToast) { firstSyncToast = true; toast('雲端同步完成，資料已安全備份 ☁️'); }
     prevStatus = st;
   }
+  if (S.loveNews.hearts || S.loveNews.seen) {
+    const h = S.loveNews.hearts;
+    S.loveNews.hearts = 0; S.loveNews.seen = 0;
+    setTimeout(() => {
+      toast(h ? `她回了你 ${h} 顆心 ❤️` : '她看過你寫的話了 💗', { icon: '💌', action: '看看', onAction: () => setView('settings'), duration: 6000 });
+      heartBurst(null); haptic([12, 40, 12]);
+    }, 300);
+  }
   scheduleRender();
 });
+setInterval(() => { if (state.view === 'settings' && document.visibilityState === 'visible' && S.cloud.user) S.sync(); }, 45000);
 
 // ---------- Service worker ----------
 if ('serviceWorker' in navigator && !inFrame && /^https?:/.test(location.protocol)) {
@@ -1018,6 +1470,8 @@ if ('serviceWorker' in navigator && !inFrame && /^https?:/.test(location.protoco
 }
 
 // ---------- 開始 ----------
-renderPill(); renderStrip(); quickChips(); updatePreview();
+applyTheme(S.getProfile());
+checkBadges();
+renderTabAva(); renderPill(); renderStrip(); quickChips(); updatePreview();
 setView(location.hash === '#charts' ? 'stats' : 'chat');
 S.initCloud();

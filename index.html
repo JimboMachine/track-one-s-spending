@@ -90,8 +90,15 @@
       </div>
     </section>
 
-    <section class="view" id="view-settings" aria-label="設定">
+    <section class="view" id="view-settings" aria-label="我的">
       <div class="view-inner">
+        <div class="card profile-card" id="profile-card"></div>
+        <div class="card love-card" id="love-card"></div>
+        <div class="stat-row" id="me-stats"></div>
+        <div class="card" id="goal-card"></div>
+        <div class="card" id="badge-card"></div>
+
+        <h2 class="section-label">設定</h2>
         <div class="card">
           <div class="card-head"><h2>每月預算</h2></div>
           <div class="field">
@@ -140,7 +147,7 @@
           <div class="set-row"><div class="t"><b>範例資料</b><small>先看看圖表長什麼樣子</small></div><button class="btn ghost sm" id="sample-btn" type="button">載入範例</button></div>
           <div class="set-row"><div class="t"><b>清除所有紀錄</b><small>建議先匯出備份</small></div><button class="btn danger sm" id="clear-btn" type="button">清除</button></div>
         </div>
-        <p class="note" style="text-align:center">隨手記帳 · v1.0</p>
+        <p class="note" style="text-align:center">隨手記帳 · v1.1</p>
       </div>
     </section>
   </main>
@@ -158,7 +165,7 @@
     <span class="tab-ind" id="tab-ind"></span>
     <button class="tab active" type="button" data-view="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M8.5 9.5h7"/></svg>記帳</button>
     <button class="tab" type="button" data-view="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>圖表</button>
-    <button class="tab" type="button" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
+    <button class="tab" type="button" data-view="settings"><span class="tab-ava" id="tab-ava"></span><span class="tab-dot" id="tab-dot" hidden></span>我的</button>
   </nav>
 </div>
 
@@ -187,6 +194,42 @@
       <button class="btn danger" id="e-del" type="button" aria-label="刪除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>刪除</button>
       <button class="btn primary" type="submit">儲存</button>
     </div>
+  </form>
+</div>
+
+<div class="sheet" id="psheet" role="dialog" aria-modal="true" aria-labelledby="psheet-title">
+  <div class="grab"></div>
+  <div class="sheet-head">
+    <h3 id="psheet-title">布置我的頁面</h3>
+    <button class="icon-btn" id="psheet-close" type="button" aria-label="關閉"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <form class="sheet-body" id="pform" autocomplete="off">
+    <div class="p-ava-row">
+      <div class="avatar xl" id="p-ava-preview" aria-hidden="true"></div>
+      <div class="p-ava-actions">
+        <button class="btn ghost sm" type="button" id="p-photo-btn">📷 上傳照片</button>
+        <button class="btn ghost sm" type="button" id="p-photo-clear" hidden>改用表情</button>
+        <input type="file" id="p-photo" accept="image/*" hidden>
+      </div>
+    </div>
+    <div class="emoji-grid" id="p-emojis" role="radiogroup" aria-label="頭像"></div>
+    <div class="field"><label for="p-name">暱稱</label><input class="input" id="p-name" maxlength="20" placeholder="想被怎麼稱呼？"></div>
+    <div class="field"><label for="p-bio">一句話</label><input class="input" id="p-bio" maxlength="40" placeholder="例如：今年存到第一桶金！"></div>
+    <div class="field"><span class="lbl">主題色</span><div class="swatches" id="p-accents" role="radiogroup" aria-label="主題色"></div></div>
+    <div class="field"><span class="lbl">外觀</span>
+      <div class="seg seg-3" id="p-mode"><button type="button" data-m="system">跟隨系統</button><button type="button" data-m="light">淺色</button><button type="button" data-m="dark">深色</button></div>
+    </div>
+    <div class="field"><span class="lbl">封面</span><div class="covers" id="p-covers" role="radiogroup" aria-label="封面"></div></div>
+    <div class="field">
+      <span class="lbl">存錢目標（選填）</span>
+      <input class="input" id="p-goal-name" maxlength="16" placeholder="目標名稱，例如：日本旅行">
+      <div class="row">
+        <div class="money-input small grow"><span>$</span><input id="p-goal-amt" inputmode="numeric" placeholder="目標金額" aria-label="目標金額"></div>
+        <div class="money-input small grow"><span>$</span><input id="p-goal-base" inputmode="numeric" placeholder="已經存了" aria-label="已經存了多少"></div>
+      </div>
+      <p class="note" style="margin:0">設定後，每筆收入減支出都會自動算進目標進度。</p>
+    </div>
+    <button class="btn primary block" type="submit">儲存</button>
   </form>
 </div>
 

@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>給你的話</title>
+<meta name="description" content="每天一句，寫給你的話">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#fff5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#150c11" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="給你的話">
+<link rel="icon" href="icons/love-180.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/love-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
+<script src="config.js"></script>
+<style>
+/* 她的專屬頁面：只讀情話、回愛心。單欄（最寬 480px），手機優先。 */
+:root {
+  --bg: #fff5f8; --bg-2: #ffe3ed; --surface: #ffffff; --paper: #fffdfa;
+  --ink: #2b1620; --ink-2: #6b4757; --muted: #86636f; --line: #f1d3de; --rule: #f6dbe5;
+  --love: #c93d72; --love-strong: #a32a59; --love-soft: #fde4ed; --on-love: #ffffff; --love-glow: rgba(201, 61, 114, .32);
+  --tape: rgba(201, 61, 114, .2);
+  --env: #f6c4d5; --env-2: #eeacc2; --env-3: #fbdae5;
+  --toast-bg: #2b1620; --toast-ink: #ffffff;
+  --sk: #f6e4eb; --sk-hi: #fdf3f7;
+  --shadow: 0 1px 2px rgba(90, 25, 50, .06), 0 12px 32px rgba(90, 25, 50, .1);
+  --font-display: "Huninn", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-out: cubic-bezier(.2, .9, .25, 1);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #150c11; --bg-2: #2c1520; --surface: #1f1419; --paper: #251820;
+    --ink: #f7e8ee; --ink-2: #d4b5c3; --muted: #a3858f; --line: #3a2630; --rule: #3a2731;
+    --love: #f07aa5; --love-strong: #ff9dc0; --love-soft: #3a1a28; --on-love: #2a0714; --love-glow: rgba(240, 122, 165, .22);
+    --tape: rgba(240, 122, 165, .26);
+    --env: #5c2b3f; --env-2: #4b2233; --env-3: #6d344b;
+    --toast-bg: #f7e8ee; --toast-ink: #2b1620;
+    --sk: #2a1b22; --sk-hi: #35232c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #150c11; --bg-2: #2c1520; --surface: #1f1419; --paper: #251820;
+  --ink: #f7e8ee; --ink-2: #d4b5c3; --muted: #a3858f; --line: #3a2630; --rule: #3a2731;
+  --love: #f07aa5; --love-strong: #ff9dc0; --love-soft: #3a1a28; --on-love: #2a0714; --love-glow: rgba(240, 122, 165, .22);
+  --tape: rgba(240, 122, 165, .26);
+  --env: #5c2b3f; --env-2: #4b2233; --env-3: #6d344b;
+  --toast-bg: #f7e8ee; --toast-ink: #2b1620;
+  --sk: #2a1b22; --sk-hi: #35232c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { background: var(--bg); }
+body {
+  margin: 0; min-height: 100vh; min-height: 100dvh; color: var(--ink);
+  background: radial-gradient(140% 46% at 50% -6%, var(--bg-2), transparent 72%) no-repeat, var(--bg);
+  font: 15px/1.55 var(--font-body); -webkit-font-smoothing: antialiased; text-size-adjust: 100%;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+button:focus-visible { outline: 2.5px solid var(--love); outline-offset: 3px; border-radius: 12px; }
+svg.h { fill: currentColor; display: block; }
+
+.wrap {
+  max-width: 480px; margin: 0 auto;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(36px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+
+.banner { background: var(--love-soft); color: var(--love-strong); border-radius: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+.banner.soft { background: var(--surface); color: var(--ink-2); border: 1px solid var(--line); }
+
+/* 上方：他的頭像和名字 */
+.hero { display: flex; align-items: center; gap: 14px; padding: 6px 2px 20px; }
+.avatar {
+  width: 60px; height: 60px; flex: none; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
+  font: 30px/1 var(--font-display); background: var(--surface);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--love), var(--shadow);
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.who { min-width: 0; }
+.who h1 { font: 22px/1.3 var(--font-display); margin: 0; word-break: break-word; }
+.who p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+
+/* 信紙 */
+.letter { position: relative; background: var(--paper); border-radius: 20px; box-shadow: var(--shadow); padding: 26px 22px 20px; margin-top: 8px; }
+.letter::before {
+  content: ""; position: absolute; top: -9px; left: 50%; width: 92px; height: 22px; margin-left: -46px;
+  background: var(--tape); border-radius: 3px; transform: rotate(-3deg);
+}
+.l-date { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.l-tag { background: var(--love-soft); color: var(--love-strong); font-weight: 700; font-size: 12px; border-radius: 99px; padding: 2px 10px; }
+.l-body {
+  font: 19px/36px var(--font-display); color: var(--ink); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  background-image: linear-gradient(to bottom, transparent 35px, var(--rule) 35px); background-size: 100% 36px;
+  min-height: 144px;
+}
+.l-sign { text-align: right; font: 16px/1.4 var(--font-display); color: var(--ink-2); margin-top: 12px; }
+.letter.reveal { animation: letterIn .7s var(--ease-spring) both; }
+@keyframes letterIn { from { opacity: 0; transform: translateY(26px) scale(.95); } to { opacity: 1; transform: none; } }
+
+/* 愛心 */
+.heart-row { display: flex; align-items: center; gap: 14px; margin: 18px 4px 0; }
+.heart-big {
+  width: 68px; height: 68px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: var(--love); color: var(--on-love); box-shadow: 0 6px 18px var(--love-glow);
+  transition: transform .15s var(--ease-spring);
+}
+.heart-big svg { width: 32px; height: 32px; }
+.heart-big:active { transform: scale(.9); }
+.pop { animation: pop .45s var(--ease-spring); }
+@keyframes pop { 0% { transform: scale(.82); } 45% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.heart-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.heart-info b { font: 18px/1.3 var(--font-display); font-weight: 400; }
+.heart-sub { font-size: 13px; color: var(--muted); }
+.float-heart {
+  position: fixed; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+  color: var(--love); pointer-events: none; z-index: 56; animation: floatUp 1.15s var(--ease-out) forwards;
+}
+.float-heart svg { width: 100%; height: 100%; }
+@keyframes floatUp {
+  0% { opacity: 0; transform: translate(0, 0) scale(.4); }
+  15% { opacity: 1; transform: translate(calc(var(--dx) * .15), -22px) scale(1.1) rotate(calc(var(--rot) * .3)); }
+  100% { opacity: 0; transform: translate(var(--dx), -160px) scale(.8) rotate(var(--rot)); }
+}
+
+/* 信封（有新的話時） */
+.env-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 14px 0 4px; }
+.envelope { position: relative; display: block; width: min(300px, 82vw); aspect-ratio: 3 / 2; perspective: 900px; animation: envIn .6s var(--ease-spring) both, bob 3.2s ease-in-out .9s infinite; }
+.envelope:focus-visible { border-radius: 16px; }
+.env-back { position: absolute; inset: 0; background: var(--env-3); border-radius: 14px; box-shadow: var(--shadow); }
+.env-paper {
+  position: absolute; left: 8%; right: 8%; top: 9%; bottom: 8%; z-index: 2; background: var(--paper); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 12px; padding: 20px 18px; transition: transform .6s var(--ease-out) .42s;
+}
+.env-paper i { display: block; height: 4px; border-radius: 4px; background: var(--rule); }
+.env-paper i:nth-child(1) { width: 40%; } .env-paper i:nth-child(3) { width: 72%; }
+.env-pocket { position: absolute; inset: 0; z-index: 3; border-radius: 14px; background: var(--env); clip-path: polygon(0 30%, 50% 72%, 100% 30%, 100% 100%, 0 100%); }
+.env-flap {
+  position: absolute; left: 0; right: 0; top: 0; height: 66%; z-index: 4; background: var(--env-2); border-radius: 14px 14px 0 0;
+  clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: 50% 0;
+  transition: transform .5s var(--ease-out) .1s, z-index 0s linear .36s;
+}
+.env-seal {
+  position: absolute; left: 50%; top: 66%; width: 48px; height: 48px; margin: -24px 0 0 -24px; z-index: 5; border-radius: 50%;
+  display: grid; place-items: center; background: var(--love); color: var(--on-love); box-shadow: 0 3px 8px var(--love-glow);
+  transition: transform .25s ease, opacity .25s ease;
+}
+.env-seal svg { width: 22px; height: 22px; }
+.env-cap { margin: 0; text-align: center; display: flex; flex-direction: column; gap: 2px; transition: opacity .3s; }
+.env-cap b { font: 18px/1.4 var(--font-display); font-weight: 400; }
+.env-cap span { font-size: 13px; color: var(--muted); }
+.opening .envelope { animation: none; }
+.opening .env-seal { transform: scale(0); opacity: 0; }
+.opening .env-flap { transform: rotateX(180deg); z-index: 1; }
+.opening .env-paper { transform: translateY(-48%); }
+.opening .env-cap { opacity: 0; }
+.opening { animation: envOut .35s ease .9s forwards; }
+@keyframes envIn { from { opacity: 0; transform: translateY(18px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-6px) rotate(-1deg); } }
+@keyframes envOut { to { opacity: 0; transform: translateY(-12px) scale(.96); } }
+
+/* 加到主畫面 */
+.hint { display: flex; gap: 12px; align-items: flex-start; margin-top: 22px; padding: 12px 8px 12px 14px; border-radius: 16px; background: var(--surface); border: 1px dashed var(--love); font-size: 13px; color: var(--ink-2); transition: opacity .25s, transform .25s; }
+.hint.out { opacity: 0; transform: scale(.97); }
+.hint b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+.h-ico { font-size: 22px; line-height: 1.2; }
+.h-x { margin-left: auto; flex: none; width: 32px; height: 32px; border-radius: 50%; color: var(--muted); display: grid; place-items: center; font-size: 14px; }
+
+/* 之前的話 */
+.past { margin-top: 32px; }
+.past h2 { font: 17px/1.3 var(--font-display); font-weight: 400; margin: 0 4px 12px; display: flex; align-items: center; gap: 8px; }
+.past h2 span { font: 600 12px/1 var(--font-body); color: var(--love-strong); background: var(--love-soft); border-radius: 99px; padding: 4px 9px; }
+.notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px 6px; }
+.n-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.n-new { color: var(--on-love); background: var(--love); border-radius: 99px; font-weight: 700; font-size: 11px; padding: 1px 8px; }
+.n-body { display: block; width: 100%; text-align: left; margin-top: 6px; cursor: default; border-radius: 8px; }
+.n-text {
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  font: 16px/1.7 var(--font-display); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+}
+.note.long .n-body { cursor: pointer; }
+.note.open .n-text { display: block; -webkit-line-clamp: unset; }
+.n-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
+.n-more { font-size: 12px; color: var(--love-strong); visibility: hidden; }
+.note.long .n-more { visibility: visible; }
+.heart-sm { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 10px; border-radius: 99px; color: var(--love); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; transition: background .2s; }
+.heart-sm svg { width: 19px; height: 19px; }
+.heart-sm:active { background: var(--love-soft); }
+.more { display: block; margin: 14px auto 0; height: 40px; padding: 0 18px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--love-strong); font-size: 14px; }
+
+.card-empty { background: var(--paper); border-radius: 20px; box-shadow: var(--shadow); padding: 36px 20px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.card-empty .big, .state .big { font-size: 50px; line-height: 1.1; }
+.card-empty b { font: 18px/1.4 var(--font-display); font-weight: 400; }
+.card-empty span { color: var(--muted); font-size: 14px; }
+
+.state { text-align: center; padding: 16vh 12px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.state h1 { font: 22px/1.35 var(--font-display); font-weight: 400; margin: 6px 0 0; }
+.state p { margin: 0; color: var(--ink-2); max-width: 320px; }
+.btn { margin-top: 14px; height: 46px; padding: 0 22px; border-radius: 14px; background: var(--love); color: var(--on-love); font-weight: 600; transition: transform .15s var(--ease-spring); }
+.btn:active { transform: scale(.96); }
+
+.foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 36px; }
+.foot p { margin: 2px 0; }
+.foot .meta { display: flex; justify-content: center; align-items: center; gap: 10px; }
+.foot button { color: var(--love-strong); text-decoration: underline; text-underline-offset: 3px; padding: 8px 4px; }
+.foot button:disabled { opacity: .6; text-decoration: none; }
+
+/* 載入中 */
+.sk-hero { display: flex; align-items: center; gap: 14px; padding: 6px 2px 20px; }
+.sk-ava { width: 60px; height: 60px; border-radius: 50%; }
+.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.sk-card { background: var(--paper); border-radius: 20px; box-shadow: var(--shadow); padding: 26px 22px; display: flex; flex-direction: column; gap: 16px; }
+.sk { display: block; height: 14px; border-radius: 8px; background: linear-gradient(90deg, var(--sk) 25%, var(--sk-hi) 50%, var(--sk) 75%); background-size: 300% 100%; animation: shimmer 1.4s linear infinite; }
+.sk-ava.sk { height: 60px; border-radius: 50%; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* 進場 */
+.enter > * { animation: rise .55s var(--ease-out) both; }
+.enter > :nth-child(2) { animation-delay: .06s; } .enter > :nth-child(3) { animation-delay: .12s; } .enter > :nth-child(n+4) { animation-delay: .18s; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.toasts { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; pointer-events: none; z-index: 60; }
+.toast { max-width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 99px; background: var(--toast-bg); color: var(--toast-ink); font-size: 14px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); animation: tIn .32s var(--ease-spring) both; }
+.toast.out { animation: tOut .25s ease forwards; }
+@keyframes tIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes tOut { to { opacity: 0; transform: translateY(8px); } }
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 55; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+}
+</style>
+</head>
+<body>
+<main class="wrap" id="app">
+  <div class="sk-hero"><span class="sk sk-ava"></span><span class="sk-lines"><span class="sk" style="width:60%"></span><span class="sk" style="width:40%"></span></span></div>
+  <div class="sk-card"><span class="sk" style="width:35%"></span><span class="sk"></span><span class="sk"></span><span class="sk" style="width:70%"></span></div>
+</main>
+<noscript><p style="text-align:center;padding:0 16px">請開啟 JavaScript 才能看到寫給你的話 💌</p></noscript>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const app = $('#app');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const haptic = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { /* 不支援就算了 */ } };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 空間滿或被封鎖 */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* 同上 */ } },
+  };
+  const HEART = '<svg class="h" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.6S3 15 3 8.9C3 6.2 5.1 4 7.7 4c1.7 0 3.2.9 4.3 2.3C13.1 4.9 14.6 4 16.3 4 18.9 4 21 6.2 21 8.9c0 6.1-9 11.7-9 11.7z"/></svg>';
+
+  // ---------- 連結與設定 ----------
+  const qs = new URLSearchParams(location.search);
+  const token = (qs.get('t') || '').trim();
+  const cfg = window.JZ_CONFIG || {};
+  const api = (qs.get('u') || cfg.supabaseUrl || '').trim().replace(/\/+$/, '');
+  const key = (qs.get('k') || cfg.supabaseAnonKey || '').trim();
+  const owner = !!token && (store.get('jz_share', null) || {}).token === token; // 他自己打開＝預覽
+  const tk = token.slice(0, 12);
+  const K = { feed: 'jz_love_feed_' + tk, opened: 'jz_love_opened_' + tk, pending: 'jz_love_pending_' + tk, hint: 'jz_love_hint_off' };
+
+  const state = {
+    feed: null, net: false, fetchedAt: 0, loading: false, offline: false,
+    showN: 10, expanded: new Set(), fresh: new Set(), opened: new Set(store.get(K.opened, [])),
+    reveal: null, envBusy: false, entered: false,
+  };
+
+  // ---------- 日期 ----------
+  const WD = ['日', '一', '二', '三', '四', '五', '六'];
+  const pad = n => String(n).padStart(2, '0');
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const fromISO = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const daysAgo = s => Math.round((fromISO(iso(new Date())) - fromISO(s)) / 864e5);
+  const fullDate = s => { const d = fromISO(s); return `${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '年' : ''}${d.getMonth() + 1}月${d.getDate()}日 星期${WD[d.getDay()]}`; };
+  const rel = s => { const n = daysAgo(s); return n === 0 ? '今天' : n === 1 ? '昨天' : n === 2 ? '前天' : ''; };
+  const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  function greet() {
+    const h = new Date().getHours();
+    return h < 5 ? '夜深了 🌙' : h < 11 ? '早安 ☀️' : h < 14 ? '午安 🌤️' : h < 18 ? '午後好 ☕' : '晚安 🌙';
+  }
+  function streak(notes) {
+    const set = new Set(notes.map(n => n.date));
+    const d = new Date();
+    if (!set.has(iso(d))) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (set.has(iso(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  // 名字夾在中文中間時，英文名前後補空白
+  const nameIn = () => {
+    const n = state.feed && state.feed.name;
+    if (!n) return '對方';
+    return (/^[A-Za-z0-9]/.test(n) ? ' ' : '') + n + (/[A-Za-z0-9]$/.test(n) ? ' ' : '');
+  };
+  const nameLead = () => nameIn().trimStart(); // 句首或標點後
+
+  // ---------- 資料 ----------
+  async function rpc(fn, body, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', apikey: key };
+    if (/^eyJ/.test(key)) headers.Authorization = 'Bearer ' + key; // 舊版 anon key 是 JWT
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl && setTimeout(() => ctl.abort(), 15000);
+    try {
+      const res = await fetch(`${api}/rest/v1/rpc/${fn}`, {
+        method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store', keepalive: !!opts.keepalive, signal: ctl ? ctl.signal : undefined,
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+      if (!res.ok) {
+        const err = new Error((data && (data.message || data.msg)) || `HTTP ${res.status}`);
+        err.status = res.status; err.code = data && data.code;
+        throw err;
+      }
+      return data;
+    } finally { if (timer) clearTimeout(timer); }
+  }
+
+  function normalize(d) {
+    if (!d || typeof d !== 'object') return null;
+    const notes = (Array.isArray(d.notes) ? d.notes : [])
+      .filter(n => n && n.id && typeof n.body === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(n.date))
+      .map(n => ({ id: String(n.id), date: n.date, body: n.body, created_at: String(n.created_at || ''), seen: !!n.seen, hearts: Math.max(0, Number(n.hearts) | 0) }));
+    notes.sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
+    return { name: typeof d.name === 'string' ? d.name.trim().slice(0, 40) : '', avatar: typeof d.avatar === 'string' ? d.avatar : '', notes };
+  }
+  const saveFeed = () => { if (state.feed) store.set(K.feed, state.feed); };
+  const findNote = id => state.feed && state.feed.notes.find(n => n.id === id);
+
+  function errKind(e) {
+    if (e && (e.status === 404 || e.code === 'PGRST202' || /love_feed|love_heart/.test(e.message || ''))) return 'setup';
+    if (e && (e.status === 401 || e.status === 403)) return 'key';
+    return 'network';
+  }
+
+  async function load({ quiet = false } = {}) {
+    if (state.loading) return;
+    state.loading = true;
+    setRefreshing(true);
+    try {
+      const data = await rpc('love_feed', { p_token: token, p_mark: false });
+      if (data == null) { store.del(K.feed); state.feed = null; renderError('gone'); return; }
+      const feed = normalize(data);
+      feed.notes.forEach(n => { n.hearts += pending.get(n.id) || 0; if (!n.seen) state.fresh.add(n.id); });
+      const wasOffline = state.offline;
+      state.feed = feed; state.net = true; state.offline = false; state.fetchedAt = Date.now();
+      saveFeed();
+      if (wasOffline || JSON.stringify(feed) !== state.sig) render();
+      else { const m = $('.foot .meta span'); if (m) m.textContent = `更新於 ${hhmm(new Date(state.fetchedAt))}`; maybeMarkSeen(); }
+      if (pending.size) flush();
+    } catch (e) {
+      console.warn(e);
+      const kind = errKind(e);
+      if (state.feed && kind === 'network') {
+        state.offline = true; render();
+        if (!quiet) toast('連不上網路，先給你看上次的內容', '📶');
+      } else renderError(kind);
+    } finally {
+      state.loading = false;
+      setRefreshing(false);
+    }
+  }
+
+  // 她真的看到了才標記「看過了」（他預覽時不算）
+  let marking = false;
+  async function markSeen() {
+    if (owner || marking || !state.net || !state.feed || !state.feed.notes.some(n => !n.seen)) return;
+    marking = true;
+    try {
+      const d = await rpc('love_feed', { p_token: token, p_mark: true });
+      if (d) { state.feed.notes.forEach(n => { n.seen = true; }); saveFeed(); }
+    } catch (e) { console.warn(e); } finally { marking = false; }
+  }
+
+  // ---------- 愛心（連按會合併成一次送出） ----------
+  const pending = new Map(Object.entries(store.get(K.pending, {})).filter(([, n]) => n > 0));
+  const savePending = () => { if (pending.size) store.set(K.pending, Object.fromEntries(pending)); else store.del(K.pending); };
+  let flushT = null, flushing = false, warned = false, previewWarned = false, tapped = 0;
+  const CHEERS = ['收到了！💗', '再一顆 💞', '心意傳過去了 ✨', '愛心 +1 💗', '好甜 🍯', '滿滿的愛 💕'];
+  let lastCheer = '';
+  function cheer() {
+    const list = [...CHEERS, `${nameLead()}會很開心的 ☺️`].filter(c => c !== lastCheer);
+    lastCheer = list[Math.floor(Math.random() * list.length)];
+    return lastCheer;
+  }
+
+  function tapHeart(id, btn) {
+    const n = findNote(id);
+    if (!n) return;
+    n.hearts = Math.min(9999, n.hearts + 1);
+    tapped++;
+    updateCounts(id);
+    const target = btn.classList.contains('heart-big') ? btn : $('svg', btn);
+    target.classList.remove('pop'); void target.getBoundingClientRect(); target.classList.add('pop');
+    floatHearts(btn, btn.classList.contains('heart-big') ? 3 : 1);
+    haptic(12);
+    const sub = btn.closest('.heart-row') && $('.heart-sub', btn.closest('.heart-row'));
+    if (sub) sub.textContent = cheer();
+    if (owner) {
+      if (!previewWarned) { previewWarned = true; toast('預覽模式：愛心不會真的送出', '👀'); }
+      return;
+    }
+    if (tapped === 1) toast(`${nameLead()}會收到你的心 💗`, '💌');
+    pending.set(id, (pending.get(id) || 0) + 1);
+    savePending(); saveFeed();
+    clearTimeout(flushT);
+    flushT = setTimeout(flush, 650);
+  }
+
+  async function flush(keepalive = false) {
+    clearTimeout(flushT); flushT = null;
+    if (owner || flushing || !pending.size) return;
+    flushing = true;
+    const items = [...pending];
+    pending.clear();
+    let failed = false;
+    for (const [id, total0] of items) {
+      let left = total0;
+      while (left > 0) {
+        const k = Math.min(50, left);
+        try {
+          const total = await rpc('love_heart', { p_token: token, p_note: id, p_n: k }, { keepalive });
+          left -= k;
+          const n = findNote(id);
+          if (n && typeof total === 'number') { n.hearts = total + left + (pending.get(id) || 0); updateCounts(id); }
+        } catch (e) {
+          console.warn(e);
+          pending.set(id, (pending.get(id) || 0) + left);
+          failed = true;
+          break;
+        }
+      }
+    }
+    flushing = false;
+    savePending(); saveFeed();
+    if (failed && !keepalive) {
+      if (!warned) { warned = true; toast('網路不穩，愛心等一下會自動補送', '📶'); }
+      flushT = setTimeout(flush, 8000);
+    } else if (pending.size) flushT = setTimeout(flush, 650);
+  }
+
+  function updateCounts(id) {
+    const n = findNote(id);
+    if (!n) return;
+    $$('[data-count]').filter(el => el.dataset.count === id).forEach(el => {
+      el.textContent = el.dataset.kind === 'big' ? heartLabel(n.hearts) : (n.hearts || '');
+    });
+  }
+  const heartLabel = h => (h ? `已送 ${h} 顆心` : '送一顆心吧');
+
+  // ---------- 畫面 ----------
+  function avatarHTML(f) {
+    const a = f.avatar || '';
+    if (/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(a)) return `<img src="${a}" alt="">`;
+    if (a) return esc(a.slice(0, 16));
+    if (f.name) return esc([...f.name][0]);
+    return '💌';
+  }
+
+  const needEnvelope = n => !!n && !n.seen && !state.opened.has(n.id);
+
+  function heroHTML(f) {
+    const st = streak(f.notes);
+    const bits = [greet()];
+    if (f.notes.length) bits.push(`寫了 ${f.notes.length} 則`);
+    if (st >= 2) bits.push(`連續 ${st} 天 💗`);
+    return `<header class="hero"><div class="avatar" aria-hidden="true">${avatarHTML(f)}</div>
+      <div class="who"><h1>${f.name ? `${esc(nameLead())}寫給你的` : '寫給你的話'}</h1><p>${bits.join(' · ')}</p></div></header>`;
+  }
+
+  function envelopeHTML(f) {
+    const unseen = f.notes.filter(n => !n.seen && !state.opened.has(n.id)).length;
+    return `<div class="env-wrap" id="env-wrap">
+      <button class="envelope" type="button" id="env" aria-label="打開信封">
+        <span class="env-back"></span><span class="env-paper"><i></i><i></i><i></i></span><span class="env-pocket"></span><span class="env-flap"></span><span class="env-seal">${HEART}</span>
+      </button>
+      <p class="env-cap"><b>${unseen > 1 ? `有 ${unseen} 則新的話等你打開` : '有一封新的話等你打開'} 💌</b><span>點信封打開</span></p>
+    </div>`;
+  }
+
+  function letterHTML(n, f) {
+    const r = rel(n.date);
+    return `<article class="letter${state.reveal === n.id ? ' reveal' : ''}" id="letter" aria-label="${esc(fullDate(n.date))}的話">
+        <div class="l-date">${r ? `<span class="l-tag">${r}</span>` : ''}<span>${fullDate(n.date)}</span></div>
+        <div class="l-body">${esc(n.body)}</div>
+        <div class="l-sign">— ${f.name ? esc(f.name) : '想你的人'}</div>
+      </article>
+      <div class="heart-row">
+        <button class="heart-big" type="button" data-heart="${esc(n.id)}" aria-label="送一顆愛心">${HEART}</button>
+        <div class="heart-info"><b data-count="${esc(n.id)}" data-kind="big">${heartLabel(n.hearts)}</b>
+          <span class="heart-sub">${n.hearts ? `你送的每顆心，${esc(nameLead())}都收得到` : `點愛心，讓${esc(nameIn())}知道你看到了`}</span></div>
+      </div>`;
+  }
+
+  function hintHTML() {
+    const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    if (standalone || store.get(K.hint, false)) return '';
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const how = ios ? '點 Safari 下方的「分享」，再選「加入主畫面」' : '點瀏覽器右上角的選單 ⋮，再選「加到主畫面」';
+    return `<aside class="hint"><span class="h-ico" aria-hidden="true">📱</span><div><b>加到主畫面，每天點一下就看得到</b>${how}</div>
+      <button class="h-x" type="button" data-hint-off aria-label="不再顯示">✕</button></aside>`;
+  }
+
+  function pastHTML(list) {
+    if (!list.length) return '';
+    const shown = list.slice(0, state.showN);
+    return `<section class="past" aria-label="之前寫給你的話"><h2>之前寫給你的 <span>${list.length}</span></h2>
+      <ul class="notes">${shown.map(n => {
+        const r = rel(n.date), open = state.expanded.has(n.id);
+        return `<li class="note${open ? ' open' : ''}" data-id="${esc(n.id)}">
+          <div class="n-top"><span>${r ? r + ' · ' : ''}${fullDate(n.date)}</span>${state.fresh.has(n.id) ? '<span class="n-new">新</span>' : ''}</div>
+          <button class="n-body" type="button" data-expand="${esc(n.id)}" aria-expanded="${open}"><span class="n-text">${esc(n.body)}</span></button>
+          <div class="n-foot"><span class="n-more">${open ? '收起' : '展開全文'}</span>
+            <button class="heart-sm" type="button" data-heart="${esc(n.id)}" aria-label="送一顆愛心">${HEART}<span data-count="${esc(n.id)}">${n.hearts || ''}</span></button></div>
+        </li>`;
+      }).join('')}</ul>
+      ${list.length > shown.length ? `<button class="more" type="button" data-more>看更多（還有 ${list.length - shown.length} 則）</button>` : ''}
+    </section>`;
+  }
+
+  const ownerBanner = () => (owner ? '<div class="banner">👀 預覽模式：這是她打開連結會看到的畫面。你在這裡開信、按愛心都不會算數。</div>' : '');
+
+  function render() {
+    if (state.envBusy) return;
+    const f = state.feed;
+    state.sig = JSON.stringify(f);
+    const latest = f.notes[0];
+    const env = needEnvelope(latest);
+    let main;
+    if (!latest) {
+      main = `<div class="card-empty"><span class="big" aria-hidden="true">✍️</span><b>還沒有寫下第一句話</b>
+        <span>${owner ? '回到 App 的「我的」頁，寫下第一句吧' : '晚點再來看看，會有驚喜的 💗'}</span></div>`;
+    } else main = env ? envelopeHTML(f) : letterHTML(latest, f);
+    app.innerHTML = ownerBanner()
+      + (state.offline ? '<div class="banner soft">📶 目前離線，顯示上次的內容</div>' : '')
+      + heroHTML(f)
+      + `<section id="top">${main}</section>`
+      + (latest && !env ? hintHTML() : '')
+      + pastHTML(f.notes.slice(1))
+      + `<footer class="foot"><p>每天都會有新的話 💌</p><p class="meta"><span>${state.fetchedAt ? `更新於 ${hhmm(new Date(state.fetchedAt))}` : ''}</span><button type="button" data-refresh>重新整理</button></p></footer>`;
+    if (!state.entered) { state.entered = true; app.classList.add('enter'); setTimeout(() => app.classList.remove('enter'), 900); }
+    state.reveal = null;
+    requestAnimationFrame(markLong);
+    maybeMarkSeen();
+  }
+  function maybeMarkSeen() {
+    const latest = state.feed && state.feed.notes[0];
+    if (latest && !needEnvelope(latest)) markSeen();
+  }
+
+  function markLong() {
+    $$('.note').forEach(li => {
+      const b = $('.n-text', li);
+      li.classList.toggle('long', li.classList.contains('open') || b.scrollHeight > b.clientHeight + 2);
+    });
+  }
+
+  function renderError(kind) {
+    const M = {
+      nolink: ['🥺', '這個連結少了一段', owner ? '連結少了雲端設定。回到 App 的「我的」頁，重新複製一次連結。' : '請對方再傳一次完整的連結給你。'],
+      gone: ['💔', '這個連結已經失效了', owner ? '你可能換過新連結或停止了分享，回到 App 的「我的」頁可以重新產生。' : '可能換了新的連結，請對方再傳一次給你。'],
+      setup: ['🛠️', '頁面還在準備中', owner ? '請到 Supabase 的 SQL Editor，重新執行一次最新的 supabase.sql。' : '請對方檢查一下設定，很快就好。'],
+      key: ['🔑', '連結的設定有點問題', owner ? 'Supabase 的網址或金鑰不對。請在 App 重新設定雲端同步，再產生一次連結。' : '請對方重新產生一次連結給你。'],
+      network: ['📶', '連不上網路', '檢查一下網路，再試一次。'],
+    }[kind];
+    app.innerHTML = `${ownerBanner()}<div class="state"><span class="big" aria-hidden="true">${M[0]}</span><h1>${M[1]}</h1><p>${M[2]}</p>
+      ${kind === 'network' || kind === 'setup' ? '<button class="btn" type="button" data-retry>再試一次</button>' : ''}</div>`;
+  }
+
+  function setRefreshing(on) {
+    const b = $('[data-refresh]');
+    if (b) { b.disabled = on; b.textContent = on ? '更新中…' : '重新整理'; }
+  }
+
+  // ---------- 開信 ----------
+  function openEnvelope() {
+    if (state.envBusy || !state.feed) return;
+    const latest = state.feed.notes[0];
+    if (!latest) return;
+    state.envBusy = true;
+    state.opened.add(latest.id);
+    if (!owner) store.set(K.opened, [...state.opened].slice(-400));
+    haptic([10, 40, 14]);
+    const done = () => {
+      state.envBusy = false;
+      state.reveal = latest.id;
+      render();
+      const l = $('#letter');
+      if (l) { const r = l.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + 30, 60); }
+      celebrate();
+    };
+    if (reduce()) { done(); return; }
+    $('#env-wrap').classList.add('opening');
+    setTimeout(done, 1150);
+  }
+
+  function celebrate() {
+    const f = state.feed;
+    const st = streak(f.notes), who = nameLead();
+    let msg = '';
+    if ([3, 7, 14, 21, 30, 50, 100, 200, 365].includes(st)) msg = `${who}已經連續 ${st} 天寫給你了 💞`;
+    else if ([10, 30, 50, 100, 200, 300, 365].includes(f.notes.length)) msg = `這是${nameIn()}寫給你的第 ${f.notes.length} 則 🎉`;
+    if (msg) setTimeout(() => toast(msg, '💌'), 700);
+  }
+
+  // ---------- 特效 ----------
+  function floatHearts(btn, count) {
+    if (reduce()) return;
+    const r = btn.getBoundingClientRect();
+    for (let i = 0; i < count; i++) {
+      const h = document.createElement('span');
+      h.className = 'float-heart';
+      h.innerHTML = HEART;
+      h.style.cssText = `left:${r.left + r.width / 2}px;top:${r.top + r.height / 3}px;--s:${(count > 1 ? 16 : 13) + Math.random() * 12}px;--dx:${(Math.random() - 0.5) * 100}px;--rot:${(Math.random() - 0.5) * 60}deg;animation-delay:${i * 80}ms`;
+      document.body.appendChild(h);
+      h.addEventListener('animationend', () => h.remove());
+      setTimeout(() => h.remove(), 2000);
+    }
+  }
+
+  const fx = $('#fx');
+  let parts = [], raf = 0;
+  function burst(x, y, count = 40) {
+    if (reduce() || !fx.getContext) return;
+    const ctx = fx.getContext('2d');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    fx.width = innerWidth * dpr; fx.height = innerHeight * dpr;
+    const love = getComputedStyle(document.documentElement).getPropertyValue('--love').trim() || '#c93d72';
+    const colors = [love, '#ff8fb6', '#ffc2d6', '#ff5c93'];
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, v = 5 + Math.random() * 7;
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: 6 + Math.random() * 8, c: colors[i % colors.length], r: (Math.random() - 0.5) * 0.7, life: 0 });
+    }
+    if (raf) return;
+    const tick = () => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      parts = parts.filter(p => p.life < 120 && p.y < innerHeight + 30);
+      for (const p of parts) {
+        p.life++; p.vy += 0.22; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy;
+        const s = p.s;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+        ctx.globalAlpha = Math.max(0, 1 - p.life / 120); ctx.fillStyle = p.c;
+        ctx.beginPath(); ctx.moveTo(0, s * 0.35);
+        ctx.bezierCurveTo(-s, -s * 0.25, -s * 0.45, -s, 0, -s * 0.45);
+        ctx.bezierCurveTo(s * 0.45, -s, s, -s * 0.25, 0, s * 0.35);
+        ctx.fill(); ctx.restore();
+      }
+      if (parts.length) raf = requestAnimationFrame(tick);
+      else { raf = 0; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  function toast(msg, icon = '💗') {
+    const wrap = $('#toasts');
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = '<span aria-hidden="true"></span><span></span>';
+    t.firstChild.textContent = icon; t.lastChild.textContent = msg;
+    while (wrap.children.length > 1) wrap.firstChild.remove();
+    wrap.appendChild(t);
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 280); }, 2800);
+  }
+
+  // ---------- 操作 ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('#env,[data-heart],[data-expand],[data-more],[data-refresh],[data-retry],[data-hint-off]');
+    if (!t) return;
+    if (t.id === 'env') openEnvelope();
+    else if (t.dataset.heart) tapHeart(t.dataset.heart, t);
+    else if (t.dataset.expand) {
+      const li = t.closest('.note');
+      if (!li.classList.contains('long')) return;
+      const open = li.classList.toggle('open');
+      t.setAttribute('aria-expanded', open);
+      $('.n-more', li).textContent = open ? '收起' : '展開全文';
+      if (open) state.expanded.add(t.dataset.expand); else state.expanded.delete(t.dataset.expand);
+      haptic(6);
+    } else if (t.hasAttribute('data-more')) { state.showN += 20; render(); }
+    else if (t.hasAttribute('data-refresh')) load();
+    else if (t.hasAttribute('data-retry')) load();
+    else if (t.hasAttribute('data-hint-off')) {
+      store.set(K.hint, true);
+      const h = t.closest('.hint');
+      h.classList.add('out');
+      setTimeout(() => h.remove(), 260);
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { flush(true); return; }
+    if (state.feed && Date.now() - state.fetchedAt > 60000) load({ quiet: true });
+  });
+  window.addEventListener('pagehide', () => flush(true));
+  window.addEventListener('online', () => { if (state.feed) load({ quiet: true }); });
+  window.addEventListener('resize', () => requestAnimationFrame(markLong));
+
+  // ---------- 開始 ----------
+  if (!token || token.length < 24) renderError('nolink');
+  else if (!/^https:\/\/[^\s/?#]+$/.test(api) || !key) renderError('nolink');
+  else {
+    const cached = normalize(store.get(K.feed, null));
+    if (cached) { state.feed = cached; render(); }
+    load({ quiet: !cached });
+  }
+})();
+</script>
+</body>
+</html>

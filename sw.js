@@ -1,11 +1,11 @@
 // 離線快取：App 本體先用快取（秒開），背景再更新；字型與雲端模組也會存起來
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 const APP_CACHE = 'jz-app-' + VERSION;
 const RUNTIME = 'jz-runtime';
 const SHELL = [
-  './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
+  './', 'index.html', 'love.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/parser.js', 'js/store.js', 'js/charts.js', 'js/feedback.js',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/love-180.png',
 ];
 
 self.addEventListener('install', e => {
@@ -44,19 +44,20 @@ self.addEventListener('fetch', e => {
 
   if (url.origin !== location.origin) return;
 
-  // 開啟頁面：離線時用快取的 index.html
+  // 開啟頁面：先拿最新的，離線時用快取（主頁和她的頁面分開存）
   if (req.mode === 'navigate') {
+    const page = /\/love\.html$/.test(url.pathname) ? 'love.html' : 'index.html';
     e.respondWith(fetch(req).then(res => {
-      caches.open(APP_CACHE).then(c => c.put('index.html', res.clone()));
+      if (res.ok) { const copy = res.clone(); caches.open(APP_CACHE).then(c => c.put(page, copy)); }
       return res;
-    }).catch(async () => (await caches.match('index.html')) || (await caches.match('./'))));
+    }).catch(async () => (await caches.match(page)) || (await caches.match('./'))));
     return;
   }
 
   // 其他檔案：快取優先，背景更新
   e.respondWith(caches.match(req).then(hit => {
     const net = fetch(req).then(res => {
-      if (res.ok) caches.open(APP_CACHE).then(c => c.put(req, res.clone()));
+      if (res.ok) { const copy = res.clone(); caches.open(APP_CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => hit);
     return hit || net;
