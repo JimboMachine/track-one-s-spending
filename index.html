@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>隨手記帳</title>
+<meta name="description" content="打一句話就記好帳的個人記帳 App">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141c19" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="隨手記帳">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }</style>
+<script src="config.js"></script>
+</head>
+<body>
+<!--APP-START-->
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M9.5 7.5 12 10l2.5-2.5M12 10v3.5M9.8 11.2h4.4"/></svg></span>
+      <h1 id="view-title">隨手記帳</h1>
+    </div>
+    <button class="sync-pill" id="sync-pill" type="button" aria-label="同步狀態"></button>
+  </header>
+
+  <button class="month-strip" id="month-strip" type="button" aria-label="查看本月統計"></button>
+
+  <main class="views">
+    <section class="view active" id="view-chat" aria-label="記帳">
+      <div class="chat" id="chat" role="log" aria-live="polite"></div>
+    </section>
+
+    <section class="view" id="view-stats" aria-label="圖表">
+      <div class="view-inner">
+        <div class="month-nav">
+          <button class="icon-btn" id="m-prev" type="button" aria-label="上個月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+          <div class="mn-title" id="m-title"></div>
+          <button class="icon-btn" id="m-next" type="button" aria-label="下個月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        </div>
+
+        <div class="card hero" id="hero">
+          <div class="h-label">本月結餘</div>
+          <div class="h-big" id="h-balance">$0</div>
+          <div class="h-row">
+            <div class="h-cell"><span>收入</span><b id="h-income">$0</b></div>
+            <div class="h-cell"><span>支出</span><b id="h-expense">$0</b></div>
+          </div>
+          <div class="h-note" id="h-note"></div>
+        </div>
+
+        <div class="card" id="budget-card"></div>
+
+        <div class="insights" id="insights"></div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>分類</h2>
+            <div class="seg" id="cat-seg" role="tablist">
+              <button type="button" data-t="expense" class="on">支出</button>
+              <button type="button" data-t="income">收入</button>
+            </div>
+          </div>
+          <div class="donut-wrap" id="donut-wrap"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>每日支出</h2><span class="card-sub" id="daily-sub"></span></div>
+          <div id="daily-chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>近六個月</h2><span class="card-sub">點一下切換月份</span></div>
+          <div class="chart-legend"><span><i style="background:var(--s1)"></i>收入</span><span><i style="background:var(--s2)"></i>支出</span></div>
+          <div id="month-chart"></div>
+        </div>
+
+        <div class="card" id="detail-card">
+          <div class="card-head"><h2>明細</h2><span id="detail-filter"></span></div>
+          <div id="detail-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-settings" aria-label="設定">
+      <div class="view-inner">
+        <div class="card">
+          <div class="card-head"><h2>每月預算</h2></div>
+          <div class="field">
+            <div class="row">
+              <div class="money-input grow" style="padding:0 14px"><span style="font-size:20px">$</span><input id="budget-input" inputmode="numeric" placeholder="例如 15000" style="height:48px;font-size:24px" aria-label="每月預算"></div>
+              <button class="btn primary" id="budget-save" type="button">儲存</button>
+            </div>
+            <p class="note" style="margin:0">設定後，每次記帳都會告訴你本月還能花多少。</p>
+          </div>
+        </div>
+
+        <div class="card" id="cloud-card"></div>
+
+        <div class="card">
+          <div class="card-head"><h2>備份</h2><span class="card-sub" id="backup-sub"></span></div>
+          <div class="row">
+            <button class="btn ghost grow" id="export-btn" type="button">⬇︎ 匯出 CSV</button>
+            <button class="btn ghost grow" id="import-btn" type="button">⬆︎ 匯入 CSV</button>
+            <input type="file" id="import-file" accept=".csv,text/csv" hidden>
+          </div>
+          <p class="note" style="margin:8px 0 0">CSV 可以用 Excel 或 Google 試算表打開。匯入時同一筆不會重複。</p>
+        </div>
+
+        <div class="card" id="install-card" hidden>
+          <div class="card-head"><h2>加到主畫面</h2></div>
+          <p class="note" id="install-text" style="margin:0 0 10px"></p>
+          <button class="btn primary block" id="install-btn" type="button" hidden>安裝到主畫面</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>記帳小技巧</h2></div>
+          <ul class="help-list">
+            <li><code>午餐 120</code>最簡單的寫法</li>
+            <li><code>昨天 計程車 250</code>可以說今天、昨天、前天、週五、11/1</li>
+            <li><code>薪水 +45000</code>加上 + 或寫收入關鍵字就是收入</li>
+            <li><code>早餐 60、咖啡 85</code>一次記好幾筆</li>
+            <li><code>房租 1.5萬</code>支援「萬」「千」和「一百二十元」</li>
+            <li><code>今天花多少</code>、<code>本月</code>隨時問我花費</li>
+            <li><code>復原</code>收回剛剛記的那一筆</li>
+          </ul>
+          <p class="note" style="margin:10px 0 0">分類記錯了，點那筆改掉就好，下次我會記住。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>資料</h2></div>
+          <div class="set-row"><div class="t"><b>範例資料</b><small>先看看圖表長什麼樣子</small></div><button class="btn ghost sm" id="sample-btn" type="button">載入範例</button></div>
+          <div class="set-row"><div class="t"><b>清除所有紀錄</b><small>建議先匯出備份</small></div><button class="btn danger sm" id="clear-btn" type="button">清除</button></div>
+        </div>
+        <p class="note" style="text-align:center">隨手記帳 · v1.0</p>
+      </div>
+    </section>
+  </main>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <div class="preview" id="preview" aria-live="polite"></div>
+    <div class="chips" id="quick-chips"></div>
+    <div class="inputrow">
+      <input id="msg" type="text" enterkeyhint="send" placeholder="打一句話記帳，例如：午餐 120" aria-label="記帳訊息">
+      <button class="send" id="send" type="submit" aria-label="送出" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </form>
+
+  <nav class="tabbar" aria-label="主選單">
+    <span class="tab-ind" id="tab-ind"></span>
+    <button class="tab active" type="button" data-view="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z"/><path d="M8.5 9.5h7"/></svg>記帳</button>
+    <button class="tab" type="button" data-view="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>圖表</button>
+    <button class="tab" type="button" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
+  </nav>
+</div>
+
+<div class="sheet-backdrop" id="sheet-backdrop"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <div class="grab"></div>
+  <div class="sheet-head">
+    <h3 id="sheet-title">編輯紀錄</h3>
+    <button class="icon-btn" id="sheet-close" type="button" aria-label="關閉"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <form class="sheet-body" id="edit-form">
+    <div class="seg" id="e-type"><button type="button" data-t="expense">支出</button><button type="button" data-t="income">收入</button></div>
+    <div class="money-input"><span>$</span><input id="e-amount" inputmode="decimal" aria-label="金額" required></div>
+    <div class="field"><span class="lbl">分類</span><div class="cat-grid" id="e-cats"></div></div>
+    <div class="field">
+      <label for="e-date">日期</label>
+      <div class="row">
+        <input class="input grow" type="date" id="e-date" required>
+        <button class="btn ghost sm" type="button" data-d="0">今天</button>
+        <button class="btn ghost sm" type="button" data-d="-1">昨天</button>
+      </div>
+    </div>
+    <div class="field"><label for="e-note">備註</label><input class="input" id="e-note" placeholder="例如：午餐"></div>
+    <div class="raw-line" id="e-raw"></div>
+    <div class="sheet-actions">
+      <button class="btn danger" id="e-del" type="button" aria-label="刪除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>刪除</button>
+      <button class="btn primary" type="submit">儲存</button>
+    </div>
+  </form>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="tip" id="tip" role="tooltip"></div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+<!--APP-END-->
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

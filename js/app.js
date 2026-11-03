@@ -1,0 +1,1023 @@
+import { parseMessage, extractAmount, CATEGORIES, categoryInfo, toISO, fromISO } from './parser.js';
+import * as S from './store.js';
+import { donut, dailyBars, monthBars, money, tip } from './charts.js';
+import { haptic, toast, confetti, countUp, pickGeneric, pickIncome, PHRASES, greeting } from './feedback.js';
+
+// ---------- 小工具 ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const inFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
+const WD = ['日', '一', '二', '三', '四', '五', '六'];
+const todayISO = () => toISO(new Date());
+const localDay = iso => toISO(new Date(iso));
+const hhmm = iso => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const monthKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const daysIn = (y, m) => new Date(y, m + 1, 0).getDate();
+const signed = e => (e.type === 'income' ? '+' : '−') + money(e.amount);
+const sum = (list, type) => list.reduce((s, e) => s + (e.type === type ? e.amount : 0), 0);
+
+function relDay(iso) {
+  const t = fromISO(todayISO()), d = fromISO(iso);
+  const diff = Math.round((t - d) / 864e5);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '昨天';
+  if (diff === 2) return '前天';
+  if (diff === -1) return '明天';
+  const [y, m, dd] = iso.split('-').map(Number);
+  return `${y !== t.getFullYear() ? y + '/' : ''}${m}/${dd}（${WD[d.getDay()]}）`;
+}
+function dayTitle(iso) {
+  const r = relDay(iso);
+  const [, m, d] = iso.split('-').map(Number);
+  return r.includes('/') ? r : `${r} · ${m}月${d}日 週${WD[fromISO(iso).getDay()]}`;
+}
+
+const EXP_SLOTS = CATEGORIES.expense.slice(0, 8).map(c => c.name);
+const INC_SLOTS = CATEGORIES.income.map(c => c.name);
+const slotOf = (type, name) => (type === 'income' ? INC_SLOTS : EXP_SLOTS).indexOf(name);
+const catColor = (type, name) => { const i = slotOf(type, name); return i >= 0 ? `var(--s${i + 1})` : 'var(--s-other)'; };
+
+const state = {
+  view: 'chat', month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), catType: 'expense', catFilter: null,
+  showCount: 60, ephemeral: [], fresh: null, flash: null, animateStats: true, editing: null,
+};
+const entries = () => S.getEntries();
+const inMonth = (list, d) => { const k = monthKey(d); return list.filter(e => e.date.startsWith(k)); };
+
+// ---------- 統計輔助 ----------
+function streak() {
+  const days = new Set(entries().map(e => localDay(e.createdAt)));
+  const d = new Date();
+  if (!days.has(toISO(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (days.has(toISO(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+const createdToday = () => entries().filter(e => !e.sample && localDay(e.createdAt) === todayISO()).length;
+const thisMonth = () => inMonth(entries(), new Date());
+
+function budgetLine(spent, budget) {
+  const rem = budget - spent, pct = spent / budget;
+  if (pct < 0.5) return `本月預算還剩 ${money(rem)}，穩穩的 💪`;
+  if (pct < 0.8) return `本月預算還剩 ${money(rem)}，繼續保持 👍`;
+  if (pct < 1) return `預算剩 ${money(rem)}，接下來省一點就好 🙂`;
+  return `本月超出預算 ${money(-rem)}，記下來就是掌握的第一步 🌱`;
+}
+
+// ---------- 記帳後的鼓勵 ----------
+function snapshot() {
+  return { count: entries().filter(e => !e.sample).length, today: createdToday(), spent: sum(thisMonth(), 'expense') };
+}
+function buildCheer(added, before) {
+  const total = entries().filter(e => !e.sample).length;
+  const today = createdToday();
+  const st = streak();
+  const firstToday = before.today === 0;
+  const budget = S.getSettings().budget;
+  let main, sub = null, celebrate = null;
+  const ms = [1, 10, 50, 100, 200, 300, 500, 1000, 2000].find(m => before.count < m && total >= m);
+  const one = added.length === 1 ? added[0] : null;
+
+  let cheaper = null;
+  if (one && one.type === 'expense') {
+    const key = one.note.trim().toLowerCase();
+    const since = toISO(new Date(Date.now() - 120 * 864e5));
+    const hist = entries().filter(e => e.id !== one.id && e.type === 'expense' && e.note.trim().toLowerCase() === key && e.date >= since);
+    if (hist.length >= 3) {
+      const avg = hist.reduce((s, e) => s + e.amount, 0) / hist.length;
+      if (one.amount < avg * 0.9 && avg - one.amount >= 5) cheaper = Math.round(avg - one.amount);
+    }
+  }
+
+  if (ms === 1) { main = PHRASES.first; celebrate = 'big'; }
+  else if (ms) { main = `第 ${ms} 筆紀錄達成！持續記帳的你超棒 🏆`; celebrate = 'big'; }
+  else if (firstToday && [3, 7, 14, 21, 30, 50, 100, 180, 365].includes(st)) { main = `連續記帳 ${st} 天 🔥 太厲害了！`; celebrate = 'big'; }
+  else if (one && one.type === 'income') { main = pickIncome(); celebrate = 'coins'; }
+  else if (added.length > 1) main = `一次記好 ${added.length} 筆，效率滿分 ⚡`;
+  else if (firstToday && st >= 2) main = `連續第 ${st} 天記帳 🔥 繼續保持！`;
+  else if (cheaper) main = `比平常的「${one.note}」少花 ${money(cheaper)} 👍`;
+  else main = pickGeneric();
+
+  const cm = monthKey(new Date());
+  const hasExpThisMonth = added.some(e => e.type === 'expense' && e.date.startsWith(cm));
+  if (budget > 0 && hasExpThisMonth) {
+    const spent = sum(thisMonth(), 'expense');
+    if (before.spent < budget * 0.8 && spent >= budget * 0.8 && spent < budget) sub = `已用掉本月預算的 80%，還剩 ${money(budget - spent)} 🙂`;
+    else sub = budgetLine(spent, budget);
+  } else if (one && one.type === 'income') {
+    sub = `本月收入累計 ${money(sum(thisMonth(), 'income'))}`;
+  } else sub = `今天已記 ${today} 筆`;
+  return { main, sub, celebrate, streakUp: firstToday && st >= 1 };
+}
+
+// ---------- 聊天畫面 ----------
+function groups() {
+  const map = new Map();
+  for (const e of [...entries()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    const k = e.msgId || e.id;
+    if (!map.has(k)) map.set(k, { id: k, at: e.createdAt, raw: e.raw, items: [], sample: !!e.sample });
+    map.get(k).items.push(e);
+  }
+  return [...map.values()];
+}
+
+function rowHTML(e, showDateTag = true, createdDay = null) {
+  const c = categoryInfo(e.type, e.category);
+  const tag = showDateTag && e.date !== createdDay ? `<span class="tag">${relDay(e.date)}</span>` : '';
+  return `<button class="rc-row${state.flash === e.id ? ' pop' : ''}" type="button" data-edit="${e.id}">
+    <span class="rc-ico" aria-hidden="true">${c.icon}</span>
+    <span class="rc-txt"><span class="rc-note">${esc(e.note)}</span><span class="rc-meta">${e.note === e.category ? (e.type === 'income' ? '收入' : '支出') : esc(e.category)}${tag}</span></span>
+    <span class="amt${e.type === 'income' ? ' inc' : ''}">${signed(e)}</span></button>`;
+}
+
+function groupHTML(g, isLast) {
+  const isFresh = state.fresh && state.fresh.msgId === g.id;
+  const fresh = isFresh && !state.fresh.shown;
+  const time = hhmm(g.at);
+  const day = localDay(g.at);
+  const net = g.items.reduce((s, e) => s + (e.type === 'income' ? e.amount : -e.amount), 0);
+  let h = '';
+  if (g.raw) h += `<div class="msg-user${fresh ? ' enter' : ''}"><div class="bubble">${esc(g.raw)}</div><div class="msg-time">${time}</div></div>`;
+  h += `<div class="msg-bot${fresh ? ' enter-late' : ''}"><div class="bot-ava" aria-hidden="true">記</div><div class="bot-col">
+    <div class="receipt${fresh ? ' new' : ''}${g.sample ? ' sample' : ''}">
+      <div class="rc-head"><span>收據 · ${time}</span></div>
+      ${g.items.map(e => rowHTML(e, true, day)).join('')}
+      ${g.items.length > 1 ? `<div class="rc-total"><span>合計 ${g.items.length} 筆</span><span class="amt">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></div>` : ''}
+      ${isFresh ? '<span class="stamp" aria-hidden="true">已記帳</span>' : ''}
+    </div>`;
+  if (isFresh && state.fresh.cheer) {
+    const c = state.fresh.cheer;
+    h += `<div class="cheer${fresh ? ' enter-late' : ''}"><strong>${esc(c.main)}</strong>${isLast ? '<button class="undo" type="button" data-act="undo">撤銷</button>' : ''}${c.sub ? `<span class="sub">${esc(c.sub)}</span>` : ''}</div>`;
+  }
+  return h + '</div></div>';
+}
+
+function welcomeHTML() {
+  return `<div class="msg-bot enter"><div class="bot-ava" aria-hidden="true">記</div><div class="bot-col"><div class="bot-text">
+    <p><b>${greeting()}</b> 我是你的記帳小幫手。</p>
+    <p>直接打一句話就記好了，金額、日期、分類都交給我。點一個例子試試看：</p>
+    <div class="ex">
+      <button class="chip" type="button" data-try="午餐 120">🍜 午餐 120</button>
+      <button class="chip" type="button" data-try="昨天 計程車 250">🚕 昨天 計程車 250</button>
+      <button class="chip" type="button" data-try="薪水 +45000">💰 薪水 +45000</button>
+      <button class="chip" type="button" data-try="早餐 60、咖啡 85">☕ 早餐 60、咖啡 85</button>
+    </div>
+    <p class="hint" style="margin-top:12px">想先看看圖表長怎樣？<button class="linkish" type="button" data-act="sample">載入範例資料</button></p>
+  </div></div></div>`;
+}
+
+function botHTML(m) {
+  const an = m.shown ? '' : ' enter';
+  if (m.user) return `<div class="msg-user${an}"><div class="bubble">${esc(m.user)}</div><div class="msg-time">${hhmm(m.at)}</div></div>`;
+  return `<div class="msg-bot${m.shown ? '' : ' enter-late'}"><div class="bot-ava" aria-hidden="true">記</div><div class="bot-col"><div class="bot-text">${m.html}</div></div></div>`;
+}
+
+function renderChat(forceBottom = false, smooth = false) {
+  const view = $('#view-chat'), chat = $('#chat');
+  const near = view.scrollHeight - view.scrollTop - view.clientHeight < 160;
+  const gs = groups();
+  const items = [...gs.map(g => ({ at: g.at, g })), ...state.ephemeral.map(m => ({ at: m.at, m }))].sort((a, b) => a.at.localeCompare(b.at));
+  const visible = items.slice(-state.showCount);
+  const lastG = [...visible].reverse().find(it => it.g);
+  let h = '';
+  if (items.length > visible.length) h += '<button class="load-more" type="button" data-act="more">顯示更早的紀錄</button>';
+  if (!gs.length) h += welcomeHTML();
+  let lastDay = null;
+  for (const it of visible) {
+    const day = localDay(it.at);
+    if (day !== lastDay) { h += `<div class="day-sep">${dayTitle(day)}</div>`; lastDay = day; }
+    h += it.g ? groupHTML(it.g, it === lastG) : botHTML(it.m);
+  }
+  if (S.hasSample()) h += '<div class="sample-banner"><span>📊 目前顯示的是範例資料</span><button type="button" data-act="clear-sample">清除範例</button></div>';
+  chat.innerHTML = h;
+  if (state.fresh) state.fresh.shown = true;
+  state.ephemeral.forEach(m => { m.shown = true; });
+  if (forceBottom || near) requestAnimationFrame(() => view.scrollTo({ top: view.scrollHeight, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto' }));
+}
+
+function botSay(html, userText) {
+  const at = new Date();
+  if (userText) state.ephemeral.push({ at: at.toISOString(), user: userText });
+  state.ephemeral.push({ at: new Date(at.getTime() + 1).toISOString(), html });
+  renderChat(true, true);
+}
+
+// ---------- 月份摘要列 ----------
+function renderStrip() {
+  const strip = $('#month-strip');
+  const now = new Date();
+  const list = thisMonth();
+  const spent = sum(list, 'expense');
+  const budget = S.getSettings().budget;
+  const st = streak();
+  let right = '', bar = '';
+  if (budget > 0) {
+    const pct = spent / budget;
+    right = pct >= 1 ? `超出 ${money(spent - budget)}` : `預算剩 ${money(budget - spent)}`;
+    bar = `<div class="minibar${pct >= 1 ? ' over' : pct >= 0.8 ? ' warn' : ''}"><i style="width:${Math.min(100, pct * 100)}%"></i></div>`;
+  } else {
+    const today = list.filter(e => e.date === todayISO());
+    right = `今天 ${money(sum(today, 'expense'))}`;
+  }
+  const prevStreak = Number(strip.dataset.streak || 0);
+  const from = stripPrev ?? spent;
+  strip.innerHTML = `<div class="ms-main"><div class="ms-row"><span class="left">${now.getMonth() + 1}月支出 <b class="num" id="ms-spent" data-v="${from}">${money(from)}</b></span><span>${right}</span></div>${bar}</div>
+    ${st > 0 ? `<span class="streak${st > prevStreak && prevStreak > 0 ? ' pop' : ''}" title="連續記帳天數">🔥 ${st} 天</span>` : ''}`;
+  strip.dataset.streak = st;
+  countUp($('#ms-spent'), spent, money, 600);
+  stripPrev = spent;
+}
+let stripPrev = null;
+
+// ---------- 同步狀態 ----------
+const ICON = {
+  device: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18h2"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.4 1.6A3.8 3.8 0 0 1 17.5 18z"/><path d="m9.5 13 2 2 3.5-3.5"/></svg>',
+  sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+};
+function renderPill() {
+  const p = $('#sync-pill');
+  const st = S.cloud.status;
+  const map = {
+    off: ['', ICON.device, '本機'], signedout: ['', ICON.user, '未登入'], idle: ['ok', ICON.cloud, '已同步'],
+    syncing: ['spin', ICON.sync, '同步中'], offline: ['', ICON.warn, '離線'], error: ['err', ICON.warn, '同步失敗'],
+  };
+  const [cls, ic, txt] = map[st] || map.off;
+  p.className = 'sync-pill ' + cls;
+  p.innerHTML = ic + `<span>${txt}</span>`;
+}
+
+// ---------- 輸入列 ----------
+const input = $('#msg'), sendBtn = $('#send'), preview = $('#preview');
+const COMMANDS = [
+  [/^(幫助|說明|help|\?|？|怎麼用|教學|指令)$/i, () => helpReply()],
+  [/^(復原|撤銷|收回|undo)/i, () => undoLast(true)],
+  [/^(嗨|哈囉|hi|hello|hey|你好|安安)/i, () => helpReply(true)],
+  [/(這週|本週|這禮拜|這星期)/, () => summary('week')],
+  [/(上個月|上月)/, () => summary('lastmonth')],
+  [/(本月|這個月|這月)/, () => summary('month')],
+  [/(今天|今日)/, () => summary('day')],
+  [/(花多少|花了多少|總共|統計)/, () => summary('month')],
+];
+const matchCommand = t => COMMANDS.find(([re]) => re.test(t));
+
+function updatePreview() {
+  const t = input.value.trim();
+  sendBtn.disabled = !t;
+  preview.className = 'preview';
+  if (!t) {
+    const n = createdToday();
+    const spent = sum(entries().filter(e => e.date === todayISO()), 'expense');
+    preview.innerHTML = n ? `<span>今天已記 ${n} 筆 · 支出 ${money(spent)}，做得好 ✨</span>` : `<span>${greeting()} 今天記第一筆吧</span>`;
+    return;
+  }
+  const r = parseMessage(t, { learned: S.getLearned() });
+  if (r.length === 1) {
+    const e = r[0], c = categoryInfo(e.type, e.category);
+    preview.className = 'preview ok';
+    preview.innerHTML = `<span class="pv-chip${e.type === 'income' ? ' inc' : ''}">${c.icon} ${esc(e.category)} · ${esc(e.note)} · ${relDay(e.date)} <b>${signed(e)}</b></span>`;
+  } else if (r.length > 1) {
+    const net = r.reduce((s, e) => s + (e.type === 'income' ? e.amount : -e.amount), 0);
+    preview.className = 'preview ok';
+    preview.innerHTML = `<span class="pv-chip">${r.map(e => categoryInfo(e.type, e.category).icon).join('')} ${r.length} 筆 · 合計 <b>${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</b></span>`;
+  } else if (matchCommand(t)) {
+    preview.innerHTML = '<span>💬 按送出，我來幫你查</span>';
+  } else {
+    preview.innerHTML = '<span>還差金額喔，例如「午餐 120」</span>';
+  }
+}
+
+function quickChips() {
+  const since = toISO(new Date(Date.now() - 60 * 864e5));
+  const cnt = new Map();
+  for (const e of entries()) if (e.date >= since && !e.sample && e.note.length <= 8) {
+    const k = e.note; const v = cnt.get(k) || { n: 0, e }; v.n++; cnt.set(k, v);
+  }
+  let top = [...cnt.values()].sort((a, b) => b.n - a.n).slice(0, 7).map(v => [categoryInfo(v.e.type, v.e.category).icon, v.e.note]);
+  const defaults = [['🍳', '早餐'], ['🍱', '午餐'], ['🍲', '晚餐'], ['🧋', '飲料'], ['🚇', '捷運'], ['🛒', '全聯'], ['🚕', '計程車']];
+  for (const d of defaults) if (top.length < 7 && !top.some(t => t[1] === d[1])) top.push(d);
+  $('#quick-chips').innerHTML = top.map(([i, n]) => `<button class="chip" type="button" data-chip="${esc(n)}">${i} ${esc(n)}</button>`).join('');
+}
+
+function insertChip(word) {
+  const v = input.value.trim();
+  input.value = !v ? word + ' ' : /^[\d.,]+$/.test(v) ? `${word} ${v}` : `${word} ${v}`;
+  input.focus();
+  const L = input.value.length; input.setSelectionRange(L, L);
+  haptic(6); updatePreview();
+}
+
+function submit() {
+  const text = input.value.trim();
+  if (!text) return;
+  const parsed = parseMessage(text, { learned: S.getLearned() });
+  if (parsed.length) {
+    const before = snapshot();
+    const added = S.addEntries(parsed, text);
+    const cheer = buildCheer(added, before);
+    state.fresh = { msgId: added[0].msgId, cheer };
+    input.value = '';
+    updatePreview();
+    sendBtn.classList.remove('fly'); void sendBtn.offsetWidth; sendBtn.classList.add('fly');
+    renderChat(true, true);
+    if (cheer.celebrate === 'big') { haptic([18, 50, 18]); setTimeout(() => confetti({ count: 130 }), 350); }
+    else if (cheer.celebrate === 'coins') {
+      haptic([12, 40, 12]);
+      const cs = getComputedStyle(document.documentElement);
+      setTimeout(() => confetti({ count: 70, colors: [cs.getPropertyValue('--gold').trim(), '#ffd84d', cs.getPropertyValue('--accent').trim()] }), 350);
+    } else haptic(15);
+    quickChips();
+    return;
+  }
+  const cmd = matchCommand(text);
+  if (cmd) { input.value = ''; updatePreview(); haptic(8); cmd[1](text); return; }
+  // 沒有金額
+  haptic([10, 40, 10]);
+  const row = $('.inputrow');
+  row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
+  preview.className = 'preview ok';
+  const word = text.replace(/\s+/g, ' ').slice(0, 10);
+  preview.innerHTML = `<span>「${esc(word)}」花了多少呢？在後面補上金額就好 🙂</span>`;
+  if (!input.value.endsWith(' ')) input.value += ' ';
+  input.focus();
+}
+
+function helpReply(hello = false) {
+  const userText = input.dataset.last || null;
+  botSay(`${hello ? `<p><b>${greeting()}</b> 有什麼要記的嗎？</p>` : ''}
+    <p>這些寫法我都看得懂：</p>
+    <div class="ex">
+      <button class="chip" type="button" data-try="午餐 120">午餐 120</button>
+      <button class="chip" type="button" data-try="昨天 計程車 250">昨天 計程車 250</button>
+      <button class="chip" type="button" data-try="週五 聚餐 800">週五 聚餐 800</button>
+      <button class="chip" type="button" data-try="薪水 +45000">薪水 +45000</button>
+      <button class="chip" type="button" data-try="早餐 60、咖啡 85">早餐 60、咖啡 85</button>
+    </div>
+    <p class="hint" style="margin-top:10px">也可以問我「今天花多少」「本月」，或說「復原」收回上一筆。</p>`, userText);
+}
+
+function summary(kind) {
+  const userText = input.dataset.last;
+  const now = new Date();
+  let from, to, label;
+  const t = todayISO();
+  if (kind === 'day') { from = to = t; label = '今天'; }
+  else if (kind === 'week') {
+    const m = new Date(now); m.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    from = toISO(m); to = t; label = '這週';
+  } else if (kind === 'lastmonth') {
+    const a = new Date(now.getFullYear(), now.getMonth() - 1, 1), b = new Date(now.getFullYear(), now.getMonth(), 0);
+    from = toISO(a); to = toISO(b); label = `${a.getMonth() + 1}月`;
+  } else { from = toISO(new Date(now.getFullYear(), now.getMonth(), 1)); to = t; label = '本月'; }
+  const list = entries().filter(e => e.date >= from && e.date <= to);
+  const exp = sum(list, 'expense'), inc = sum(list, 'income');
+  const byCat = {};
+  list.filter(e => e.type === 'expense').forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+  const top = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+  let h = `<p><b>${label}</b>支出 <b>${money(exp)}</b>（${list.filter(e => e.type === 'expense').length} 筆）${inc ? `，收入 <b>${money(inc)}</b>` : ''}</p>`;
+  if (!exp && kind === 'day') h += '<p>今天還沒有花錢，無支出日 🌱 很讚！</p>';
+  else if (top) h += `<p>花最多的是 ${categoryInfo('expense', top[0]).icon} ${esc(top[0])} ${money(top[1])}</p>`;
+  const budget = S.getSettings().budget;
+  if (budget > 0 && (kind === 'month' || kind === 'day' || kind === 'week')) h += `<p class="hint">${budgetLine(sum(thisMonth(), 'expense'), budget)}</p>`;
+  h += `<p class="hint" style="margin-top:8px"><button class="linkish" type="button" data-go="stats">看圖表 →</button></p>`;
+  botSay(h, userText);
+}
+
+function undoLast(fromChat = false) {
+  const gs = groups().filter(g => !g.sample);
+  const g = gs[gs.length - 1];
+  const userText = fromChat ? input.dataset.last : null;
+  if (!g) { if (fromChat) botSay('<p>目前沒有可以收回的紀錄喔。</p>', userText); return; }
+  const copy = g.items.map(e => ({ ...e }));
+  S.deleteEntries(g.items.map(e => e.id));
+  if (state.fresh?.msgId === g.id) state.fresh = null;
+  haptic(10);
+  if (fromChat) botSay(`<p>已收回「${esc(g.raw || g.items[0].note)}」✓</p>`, userText);
+  else renderChat();
+  toast(`已收回 ${g.items.length} 筆`, { icon: '↩️', action: '還原', onAction: () => { S.restoreEntries(copy); toast('已還原 ✓'); } });
+  quickChips();
+}
+
+// ---------- 編輯 ----------
+const sheet = $('#sheet'), backdrop = $('#sheet-backdrop'), form = $('#edit-form');
+function renderCats(type, selected) {
+  $('#e-cats').innerHTML = CATEGORIES[type].map(c => `<button type="button" class="cat${c.name === selected ? ' on' : ''}" data-cat="${c.name}"><span>${c.icon}</span>${c.name}</button>`).join('');
+}
+function openEdit(id) {
+  const e = S.getEntry(id); if (!e) return;
+  state.editing = { id, type: e.type, category: e.category, orig: { ...e } };
+  $$('#e-type button').forEach(b => b.classList.toggle('on', b.dataset.t === e.type));
+  $('#e-amount').value = e.amount;
+  renderCats(e.type, e.category);
+  $('#e-date').value = e.date;
+  $('#e-note').value = e.note;
+  $('#e-raw').textContent = (e.raw ? `原始訊息：「${e.raw}」 · ` : '') + `記於 ${localDay(e.createdAt).replace(/-/g, '/')} ${hhmm(e.createdAt)}`;
+  sheet.style.transform = '';
+  sheet.classList.add('show'); backdrop.classList.add('show');
+  sheet.scrollTop = 0;
+  haptic(6);
+}
+function closeEdit() { sheet.classList.remove('show'); backdrop.classList.remove('show'); state.editing = null; sheet.style.transform = ''; }
+
+$('#e-type').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b || !state.editing) return;
+  const t = b.dataset.t; if (t === state.editing.type) return;
+  state.editing.type = t;
+  $$('#e-type button').forEach(x => x.classList.toggle('on', x === b));
+  if (!CATEGORIES[t].some(c => c.name === state.editing.category)) state.editing.category = t === 'income' ? '其他收入' : '其他';
+  renderCats(t, state.editing.category); haptic(6);
+});
+$('#e-cats').addEventListener('click', ev => {
+  const b = ev.target.closest('.cat'); if (!b || !state.editing) return;
+  state.editing.category = b.dataset.cat;
+  $$('#e-cats .cat').forEach(x => x.classList.toggle('on', x === b)); haptic(6);
+});
+$$('[data-d]', form).forEach(b => b.addEventListener('click', () => {
+  const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.d)); $('#e-date').value = toISO(d); haptic(6);
+}));
+form.addEventListener('submit', ev => {
+  ev.preventDefault();
+  const ed = state.editing; if (!ed) return;
+  const raw = $('#e-amount').value.trim();
+  const a = extractAmount(raw);
+  const amount = a ? a.amount : parseFloat(raw.replace(/,/g, ''));
+  if (!(amount > 0)) {
+    const m = $('.money-input', form); m.classList.remove('shake'); void m.offsetWidth; m.classList.add('shake');
+    haptic([10, 40, 10]); $('#e-amount').focus(); return;
+  }
+  const date = $('#e-date').value || ed.orig.date;
+  const note = $('#e-note').value.trim() || ed.category;
+  S.updateEntry(ed.id, { type: ed.type, category: ed.category, amount, date, note });
+  let msg = '已更新 ✓';
+  if (ed.category !== ed.orig.category || ed.type !== ed.orig.type) {
+    S.learn(note, ed.type, ed.category);
+    msg = `已更新！下次「${note}」會自動分到 ${categoryInfo(ed.type, ed.category).icon} ${ed.category}`;
+  }
+  state.flash = ed.id;
+  closeEdit();
+  haptic(12);
+  toast(msg, { icon: '✨' });
+  setTimeout(() => { state.flash = null; }, 800);
+});
+$('#e-del').addEventListener('click', () => {
+  const ed = state.editing; if (!ed) return;
+  const copy = { ...S.getEntry(ed.id) };
+  S.deleteEntries([ed.id]);
+  closeEdit(); haptic([10, 30, 10]);
+  toast(`已刪除「${copy.note}」`, { icon: '🗑️', action: '復原', onAction: () => { S.restoreEntries([copy]); toast('已復原 ✓'); } });
+});
+$('#sheet-close').addEventListener('click', closeEdit);
+backdrop.addEventListener('click', closeEdit);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.editing) closeEdit(); });
+// 下滑關閉
+(() => {
+  let y0 = null, dy = 0;
+  const start = e => { if (sheet.scrollTop > 0) return; y0 = e.touches ? e.touches[0].clientY : e.clientY; dy = 0; sheet.style.transition = 'none'; };
+  const move = e => { if (y0 == null) return; dy = Math.max(0, (e.touches ? e.touches[0].clientY : e.clientY) - y0); sheet.style.transform = `translate(-50%, ${dy}px)`; };
+  const end = () => { if (y0 == null) return; sheet.style.transition = ''; y0 = null; if (dy > 90) closeEdit(); else sheet.style.transform = ''; };
+  const grab = $('.sheet-head', sheet).parentElement.querySelector('.grab');
+  [grab, $('.sheet-head', sheet)].forEach(el => {
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    el.addEventListener('touchend', end);
+  });
+})();
+
+// ---------- 圖表頁 ----------
+function renderStats(animate = state.animateStats) {
+  state.animateStats = false;
+  const m = state.month, y = m.getFullYear(), mo = m.getMonth();
+  const now = new Date();
+  const isCur = y === now.getFullYear() && mo === now.getMonth();
+  $('#m-title').textContent = `${y}年${mo + 1}月`;
+  $('#m-next').disabled = isCur || m > now;
+  const list = inMonth(entries(), m);
+  const inc = sum(list, 'income'), exp = sum(list, 'expense'), bal = inc - exp;
+
+  // 結餘
+  const fmtBal = v => (v >= 0 ? '+' : '−') + money(Math.abs(v));
+  countUp($('#h-balance'), bal, fmtBal);
+  countUp($('#h-income'), inc, money);
+  countUp($('#h-expense'), exp, money);
+  $('.h-label', $('#hero')).textContent = isCur ? '本月結餘' : `${mo + 1}月結餘`;
+  let note;
+  if (!list.length) note = isCur ? '這個月還沒有紀錄，從記一筆開始吧 ✏️' : '這個月沒有紀錄';
+  else if (inc > 0 && bal >= 0) note = `存下了收入的 ${Math.round(bal / inc * 100)}%，很棒 👏`;
+  else if (inc > 0) note = `支出比收入多 ${money(-bal)}，下個月一起調整 💪`;
+  else note = `已記錄 ${list.length} 筆，掌握每一筆就是進步 ✨`;
+  $('#h-note').textContent = note;
+
+  renderBudget(list, isCur, y, mo, animate);
+  renderInsights(list, isCur, y, mo);
+  renderDonut(list, animate);
+  renderDaily(list, isCur, y, mo, animate);
+  renderMonths(m, animate);
+  renderDetail(list);
+}
+
+function renderBudget(list, isCur, y, mo, animate) {
+  const card = $('#budget-card');
+  const budget = S.getSettings().budget;
+  if (!(budget > 0)) {
+    card.innerHTML = `<div class="card-head"><h2>每月預算</h2></div>
+      <p class="note" style="margin:0 0 10px">設定預算後，每次記帳都會告訴你還能花多少，幫你輕鬆守住荷包。</p>
+      <div class="row"><div class="money-input grow" style="padding:0 14px"><span style="font-size:20px">$</span><input id="budget-inline" inputmode="numeric" placeholder="例如 15000" style="height:46px;font-size:22px" aria-label="每月預算"></div><button class="btn primary" type="button" data-act="budget-inline">設定</button></div>`;
+    return;
+  }
+  const spent = sum(list, 'expense');
+  const pct = spent / budget;
+  const cls = pct >= 1 ? 'over' : pct >= 0.8 ? 'warn' : '';
+  const status = pct >= 1 ? ['var(--critical)', '已超出預算'] : pct >= 0.8 ? ['var(--warning)', '接近上限'] : ['var(--good)', '進度良好'];
+  let lines;
+  if (isCur) {
+    const left = daysIn(y, mo) - new Date().getDate() + 1;
+    const rem = budget - spent;
+    lines = rem >= 0
+      ? `<span>還可以花 <b>${money(rem)}</b></span><span>剩 ${left} 天 · 每天約 <b>${money(Math.floor(rem / left))}</b></span>`
+      : `<span>超出 <b>${money(-rem)}</b></span><span>剩 ${left} 天，慢慢調整就好 🌱</span>`;
+  } else {
+    lines = spent <= budget ? `<span>守住預算，省下 <b>${money(budget - spent)}</b> 🎉</span>` : `<span>超出 <b>${money(spent - budget)}</b></span>`;
+  }
+  card.innerHTML = `<div class="card-head"><h2>預算</h2><span class="status"><span class="dot" style="background:${status[0]}"></span>${status[1]}</span></div>
+    <div class="budget-lines"><span>已花 <b>${money(spent)}</b> / ${money(budget)}</span><span>${Math.round(pct * 100)}%</span></div>
+    <div class="budget-track ${cls}"><i></i></div>
+    <div class="budget-lines">${lines}</div>`;
+  const bar = $('.budget-track i', card);
+  const w = Math.min(100, pct * 100) + '%';
+  if (animate) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = w; }));
+  else { bar.style.transition = 'none'; bar.style.width = w; }
+}
+
+function renderInsights(list, isCur, y, mo) {
+  const box = $('#insights');
+  const tiles = [];
+  const expList = list.filter(e => e.type === 'expense');
+  if (!list.length) { box.innerHTML = ''; return; }
+  // 跟上個月同期比
+  const upto = isCur ? new Date().getDate() : daysIn(y, mo);
+  const prev = new Date(y, mo - 1, 1);
+  const prevList = inMonth(entries(), prev).filter(e => e.type === 'expense' && Number(e.date.slice(8)) <= upto);
+  const prevExp = prevList.reduce((s, e) => s + e.amount, 0);
+  const curExp = expList.filter(e => Number(e.date.slice(8)) <= upto).reduce((s, e) => s + e.amount, 0);
+  if (prevExp > 0) {
+    const d = (curExp - prevExp) / prevExp;
+    if (d <= -0.02) tiles.push(['👏', `少花 ${Math.round(-d * 100)}%`, `比${prev.getMonth() + 1}月同期省 ${money(prevExp - curExp)}`]);
+    else if (d >= 0.02) tiles.push(['🧭', `多花 ${Math.round(d * 100)}%`, `比${prev.getMonth() + 1}月同期多 ${money(curExp - prevExp)}`]);
+    else tiles.push(['⚖️', '跟上月差不多', `${prev.getMonth() + 1}月同期 ${money(prevExp)}`]);
+  }
+  // 無支出日
+  const spentDays = new Set(expList.map(e => e.date));
+  const free = Array.from({ length: upto }, (_, i) => i + 1).filter(d => !spentDays.has(`${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)).length;
+  if (free > 0) tiles.push(['🌱', `${free} 天`, '無支出日，給自己拍拍手']);
+  // 最常記
+  const cnt = {};
+  expList.forEach(e => { cnt[e.note] = cnt[e.note] || { n: 0, e }; cnt[e.note].n++; });
+  const fav = Object.values(cnt).sort((a, b) => b.n - a.n)[0];
+  if (fav && fav.n >= 2) tiles.push([categoryInfo('expense', fav.e.category).icon, esc(fav.e.note), `最常記的項目，${fav.n} 次`]);
+  if (tiles.length < 3 && expList.length) {
+    const big = expList.reduce((a, b) => (b.amount > a.amount ? b : a));
+    tiles.push(['🔎', money(big.amount), `最大一筆：${esc(big.note)}`]);
+  }
+  box.className = 'insights n' + Math.min(3, tiles.length);
+  box.innerHTML = tiles.slice(0, 3).map(([i, b, t]) => `<div class="insight"><span class="i-ico" aria-hidden="true">${i}</span><span class="i-big">${b}</span><span class="i-txt">${t}</span></div>`).join('');
+}
+
+function renderDonut(list, animate = true) {
+  const type = state.catType;
+  $$('#cat-seg button').forEach(b => b.classList.toggle('on', b.dataset.t === type));
+  const wrap = $('#donut-wrap');
+  const items = list.filter(e => e.type === type);
+  if (!items.length) {
+    wrap.innerHTML = `<div class="empty"><div class="big">🍃</div>這個月還沒有${type === 'income' ? '收入' : '支出'}紀錄<button class="btn primary sm" type="button" data-go="chat">去記一筆</button></div>`;
+    return;
+  }
+  const by = {};
+  items.forEach(e => { by[e.category] = by[e.category] || { v: 0, n: 0 }; by[e.category].v += e.amount; by[e.category].n++; });
+  const rows = Object.entries(by).sort((a, b) => b[1].v - a[1].v);
+  const total = rows.reduce((s, r) => s + r[1].v, 0);
+  const slices = [];
+  let other = 0;
+  rows.forEach(([name, o]) => {
+    if (slotOf(type, name) >= 0) slices.push({ key: name, label: name, icon: categoryInfo(type, name).icon, value: o.v, color: catColor(type, name) });
+    else other += o.v;
+  });
+  if (other) slices.push({ key: '__other', label: '其他', icon: '📦', value: other, color: 'var(--s-other)' });
+  wrap.innerHTML = '<div id="donut-host"></div><div class="legend" id="legend"></div>';
+  const legend = $('#legend');
+  legend.innerHTML = rows.map(([name, o]) => {
+    const pct = o.v / total * 100;
+    const key = slotOf(type, name) >= 0 ? name : '__other';
+    return `<button class="lg-row" type="button" data-cat="${esc(name)}" data-key="${esc(key)}">
+      <span class="lg-sw" style="background:${catColor(type, name)}"></span>
+      <span class="lg-ico" aria-hidden="true">${categoryInfo(type, name).icon}</span>
+      <span class="lg-mid"><span class="lg-name">${esc(name)} <small>${o.n} 筆</small></span><span class="lg-bar"><i data-w="${pct}" style="background:${catColor(type, name)}"></i></span></span>
+      <span class="lg-val"><b>${money(o.v)}</b><small>${pct.toFixed(pct < 10 ? 1 : 0)}%</small></span></button>`;
+  }).join('');
+  donut($('#donut-host'), slices, {
+    animate,
+    centerTop: type === 'income' ? '收入合計' : '支出合計',
+    onHover: key => $$('.lg-row', legend).forEach(r => r.classList.toggle('hl', key != null && r.dataset.key === key)),
+  });
+  const bars = $$('.lg-bar i', legend);
+  if (animate) requestAnimationFrame(() => requestAnimationFrame(() => bars.forEach(i => { i.style.width = i.dataset.w + '%'; })));
+  else bars.forEach(i => { i.style.transition = 'none'; i.style.width = i.dataset.w + '%'; });
+}
+
+function renderDaily(list, isCur, y, mo, animate) {
+  const n = daysIn(y, mo);
+  const days = Array.from({ length: n }, (_, i) => {
+    const iso = `${y}-${String(mo + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+    const items = list.filter(e => e.date === iso && e.type === 'expense');
+    return { iso, value: items.reduce((s, e) => s + e.amount, 0), items };
+  });
+  const elapsed = isCur ? new Date().getDate() : n;
+  const exp = days.slice(0, elapsed).reduce((s, d) => s + d.value, 0);
+  const avg = elapsed ? exp / elapsed : 0;
+  $('#daily-sub').textContent = exp ? `日均 ${money(Math.round(avg))}` : '';
+  dailyBars($('#daily-chart'), days, {
+    todayIndex: isCur ? new Date().getDate() - 1 : -1, avg: exp ? avg : 0, animate,
+    label: d => {
+      const top = [...d.items].sort((a, b) => b.amount - a.amount).slice(0, 3);
+      return `<b>${relDay(d.iso)}</b><div class="tr"><span>支出</span><span>${money(d.value)}</span></div>` +
+        (top.length ? top.map(e => `<div class="tr"><span>${categoryInfo(e.type, e.category).icon} ${esc(e.note)}</span><span>${money(e.amount)}</span></div>`).join('') + (d.items.length > 3 ? `<div>…共 ${d.items.length} 筆</div>` : '') : '<div>無支出 🌱</div>');
+    },
+  });
+}
+
+function renderMonths(m, animate) {
+  const now = new Date();
+  const curStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const diff = (curStart.getFullYear() - m.getFullYear()) * 12 + curStart.getMonth() - m.getMonth();
+  const end = diff >= 0 && diff < 6 ? curStart : m;
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(end.getFullYear(), end.getMonth() - 5 + i, 1);
+    const l = inMonth(entries(), d);
+    return { d, label: `${d.getMonth() + 1}月`, full: `${d.getFullYear()}年${d.getMonth() + 1}月`, income: sum(l, 'income'), expense: sum(l, 'expense') };
+  });
+  const sel = months.findIndex(x => monthKey(x.d) === monthKey(m));
+  monthBars($('#month-chart'), months, {
+    selected: sel, animate,
+    onPick: i => { if (i === sel) return; state.month = months[i].d; state.catFilter = null; haptic(6); tip(null); renderStats(true); },
+  });
+}
+
+function renderDetail(list) {
+  const f = state.catFilter;
+  const items = (f ? list.filter(e => e.category === f) : list).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  $('#detail-filter').innerHTML = f ? `<span class="filter-chip">${categoryInfo(state.catType, f).icon} ${esc(f)}<button type="button" data-act="clear-filter" aria-label="清除篩選">✕</button></span>` : `<span class="card-sub">${list.length} 筆</span>`;
+  if (!items.length) { $('#detail-list').innerHTML = '<div class="empty"><div class="big">📭</div>沒有紀錄</div>'; return; }
+  let h = '', day = null;
+  const dayTotal = {};
+  items.forEach(e => { dayTotal[e.date] = (dayTotal[e.date] || 0) + (e.type === 'income' ? e.amount : -e.amount); });
+  for (const e of items) {
+    if (e.date !== day) { day = e.date; const t = dayTotal[day]; h += `<div class="list-day"><span>${dayTitle(day)}</span><span class="num">${t >= 0 ? '+' : '−'}${money(Math.abs(t))}</span></div>`; }
+    h += rowHTML(e, false);
+  }
+  $('#detail-list').innerHTML = h;
+}
+
+// ---------- 設定頁 ----------
+let cloudKey = '';
+function renderSettings(force = false) {
+  const st = S.getSettings();
+  if (force) $('#budget-input').value = st.budget || '';
+  const last = st.lastExport;
+  $('#backup-sub').textContent = last ? `上次備份：${relDay(toISO(new Date(last)))}` : '還沒備份過';
+  $('#sample-btn').textContent = S.hasSample() ? '清除範例' : '載入範例';
+  renderInstall();
+  const cfg = S.getCloudConfig();
+  const key = [S.cloud.status, S.cloud.user?.id, !!cfg, S.cloud.error, S.cloud.lastSync && hhmm(S.cloud.lastSync.toISOString()), inFrame].join('|');
+  if (key !== cloudKey || force) { cloudKey = key; renderCloud(cfg); }
+}
+
+function cfgForm(cfg, open) {
+  return `<details class="adv"${open ? ' open' : ''}><summary>${cfg ? '變更 Supabase 設定' : '設定 Supabase'}</summary>
+    <div class="sheet-body" style="gap:10px">
+      <div class="field"><label for="sb-url">Project URL</label><input class="input" id="sb-url" placeholder="https://xxxx.supabase.co" value="${esc(cfg?.url || '')}" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="sb-key">anon key（或 Publishable key）</label><input class="input" id="sb-key" placeholder="eyJhbGciOi…" value="${esc(cfg?.key || '')}" autocapitalize="off" spellcheck="false"></div>
+      <div class="row"><button class="btn primary grow" type="button" data-act="cloud-save">儲存並連線</button>${cfg ? '<button class="btn ghost" type="button" data-act="cloud-remove">中斷連線</button>' : ''}</div>
+      <p class="note" style="margin:0">這兩個值在 Supabase 後台 Project Settings → API。完整步驟見說明文件。</p>
+    </div></details>`;
+}
+function renderCloud(cfg) {
+  const card = $('#cloud-card');
+  const c = S.cloud;
+  let h = '<div class="card-head"><h2>雲端同步</h2>';
+  if (inFrame) {
+    card.innerHTML = h + '<span class="card-sub">預覽模式</span></div><p class="note" style="margin:0">預覽版的資料只存在這個瀏覽器。放上你自己的網址後，就能用 Google 登入，手機和電腦看到同一份帳。</p>';
+    return;
+  }
+  if (!cfg) {
+    h += '<span class="card-sub">未開啟</span></div><p class="note" style="margin:0 0 6px">目前資料只存在這台裝置。開啟同步後，換手機或用電腦都看得到同一份帳，也不怕資料不見。</p>' + cfgForm(null, false);
+  } else if (!c.user) {
+    h += `<span class="card-sub">${c.status === 'error' ? '連線失敗' : '尚未登入'}</span></div>`;
+    if (c.error) h += `<p class="note" style="color:var(--danger);margin:0 0 8px">⚠️ ${esc(c.error)}</p>`;
+    h += `<p class="note" style="margin:0 0 10px">登入一次，之後就會自動同步。這台裝置上的紀錄也會一起上傳。</p>
+      <button class="btn primary block" type="button" data-act="signin"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>用 Google 登入</button>
+      <div class="row" style="margin-top:10px"><input class="input grow" id="sb-email" type="email" inputmode="email" placeholder="或輸入 Email 收登入連結" autocapitalize="off" aria-label="Email"><button class="btn ghost" type="button" data-act="signin-email">寄送</button></div>` + cfgForm(cfg, false);
+  } else {
+    const label = { idle: '已同步', syncing: '同步中…', offline: '離線中，連上網路後自動同步', error: '同步失敗' }[c.status] || '';
+    h += `<span class="status"><span class="dot" style="background:${c.status === 'error' ? 'var(--critical)' : c.status === 'idle' ? 'var(--good)' : 'var(--warning)'}"></span>${label}</span></div>
+      <div class="set-row" style="border:0;padding-top:0"><div class="t"><b>${esc(c.user.email || '已登入')}</b><small>${c.lastSync ? '上次同步 ' + hhmm(c.lastSync.toISOString()) : '每次記帳都會自動同步'}</small></div></div>
+      ${c.error ? `<p class="note" style="color:var(--danger);margin:0 0 8px">⚠️ ${esc(c.error)}</p>` : ''}
+      <div class="row"><button class="btn ghost grow" type="button" data-act="sync-now">立即同步</button><button class="btn ghost" type="button" data-act="signout">登出</button></div>`;
+  }
+  card.innerHTML = h;
+}
+
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; renderInstall(); });
+window.addEventListener('appinstalled', () => { deferredInstall = null; toast('安裝完成！之後從主畫面打開就好 🎉', { icon: '📲' }); confetti({ count: 100 }); renderInstall(); });
+function renderInstall() {
+  const card = $('#install-card');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone || inFrame) { card.hidden = true; return; }
+  card.hidden = false;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  $('#install-btn').hidden = !deferredInstall;
+  $('#install-text').textContent = deferredInstall ? '裝到主畫面後，點一下就能記帳，用起來就像一般 App。'
+    : ios ? '在 Safari 點下方的「分享」按鈕，再選「加入主畫面」，就能像 App 一樣使用。'
+      : '在瀏覽器選單選「加到主畫面」或「安裝應用程式」，就能像 App 一樣使用。';
+}
+
+// ---------- 對話框 ----------
+function dialog({ title, body, ok = '確定', cancel = '取消', danger = false, extra = '', onOk }) {
+  return new Promise(res => {
+    const w = document.createElement('div');
+    w.className = 'dialog-wrap';
+    w.innerHTML = `<div class="dialog" role="alertdialog" aria-modal="true"><h3>${title}</h3>${body ? `<p>${body}</p>` : ''}${extra}
+      <div class="row">${cancel ? `<button class="btn ghost" type="button" data-r="0">${cancel}</button>` : ''}<button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-r="1">${ok}</button></div></div>`;
+    const done = v => { w.remove(); res(v); };
+    w.addEventListener('click', e => {
+      const b = e.target.closest('[data-r]');
+      if (b) { if (b.dataset.r === '1' && onOk && onOk(w, () => done(true)) === false) return; done(b.dataset.r === '1'); }
+      else if (e.target === w) done(false);
+    });
+    document.body.appendChild(w);
+    $('[data-r="1"]', w).focus();
+  });
+}
+
+// ---------- 範例資料 ----------
+function makeSample() {
+  const out = [];
+  const now = new Date();
+  const rnd = (a, b) => Math.round((a + Math.random() * (b - a)) / 5) * 5;
+  const add = (d, note, amount, type = 'expense', hour = 12) => {
+    const p = parseMessage(`${note} ${amount}`)[0];
+    const iso = toISO(d);
+    const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour, Math.floor(Math.random() * 59));
+    if (at > now) return; // 今天還沒到的時間就不產生
+    out.push({ raw: `${note} ${type === 'income' ? '+' : ''}${amount}`, type, amount, category: p ? (type === 'income' ? (p.type === 'income' ? p.category : '其他收入') : p.category) : '其他', date: iso, note, createdAt: at.toISOString() });
+  };
+  for (let back = 5; back >= 0; back--) {
+    const y = now.getFullYear(), mo = now.getMonth() - back;
+    const n = daysIn(new Date(y, mo, 1).getFullYear(), new Date(y, mo, 1).getMonth());
+    for (let day = 1; day <= n; day++) {
+      const d = new Date(y, mo, day);
+      if (d > now) break;
+      const wd = d.getDay();
+      if (day === 1) add(d, '房租', 12000, 'expense', 9);
+      if (day === 5) add(d, '薪水', 45000, 'income', 10);
+      if (day === 10) add(d, 'Netflix', 390, 'expense', 20);
+      if (day === 15) add(d, '電話費', 599, 'expense', 19);
+      if (day === 20 && (mo % 2 === 0)) add(d, '電費', rnd(600, 1400), 'expense', 19);
+      if ([8, 18, 28].includes(day)) add(d, '加油', rnd(900, 1300), 'expense', 18);
+      if (back === 2 && day === 12) add(d, '股利', 3200, 'income', 9);
+      if (Math.random() < 0.7) add(d, '早餐', rnd(45, 90), 'expense', 8);
+      if (Math.random() < 0.85) add(d, wd % 6 === 0 ? '早午餐' : '午餐', rnd(95, 180), 'expense', 12);
+      if (Math.random() < 0.45) add(d, '飲料', rnd(45, 75), 'expense', 15);
+      if (wd > 0 && wd < 6 && Math.random() < 0.7) add(d, '捷運', rnd(20, 45), 'expense', 9);
+      if (wd === 6 && Math.random() < 0.6) add(d, '聚餐', rnd(400, 900), 'expense', 19);
+      else if (Math.random() < 0.75) add(d, '晚餐', rnd(100, 260), 'expense', 19);
+      if (Math.random() < 0.12) add(d, '蝦皮', rnd(200, 1500), 'expense', 22);
+      if (Math.random() < 0.1) add(d, '全聯', rnd(300, 900), 'expense', 20);
+      if (Math.random() < 0.06) add(d, '電影', 330, 'expense', 21);
+      if (Math.random() < 0.08) add(d, '計程車', rnd(150, 350), 'expense', 23);
+      if (Math.random() < 0.04) add(d, '看醫生', 150, 'expense', 10);
+      if (Math.random() < 0.05) add(d, '書', rnd(250, 480), 'expense', 16);
+    }
+  }
+  return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+function toggleSample() {
+  if (S.hasSample()) { S.clearSample(); toast('範例資料已清除，開始記你自己的帳吧 ✏️'); return; }
+  S.addSample(makeSample());
+  state.animateStats = true;
+  toast('已載入範例資料', { icon: '📊', action: '看圖表', onAction: () => setView('stats') });
+}
+
+// ---------- 匯出匯入 ----------
+async function doExport() {
+  const csv = S.toCSV();
+  const n = entries().length;
+  if (!n) { toast('還沒有紀錄可以匯出', { icon: '📭' }); return; }
+  if (inFrame) {
+    const ok = await dialog({
+      title: '匯出 CSV', body: '預覽模式不能直接下載，複製下面的內容貼到記事本存成 .csv 就可以。', ok: '複製',
+      extra: `<textarea readonly id="csv-text" aria-label="CSV 內容">${esc(csv.replace(/^﻿/, ''))}</textarea>`,
+      onOk: (w, close) => {
+        const ta = $('#csv-text', w);
+        const manual = () => { ta.focus(); ta.select(); toast('請長按文字，選「全選」再複製', { icon: '✋', duration: 4000 }); };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(close, manual);
+          else manual();
+        } catch { manual(); }
+        return false;
+      },
+    });
+    if (!ok) return;
+  } else {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `記帳備份-${todayISO().replace(/-/g, '')}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  S.setSettings({ lastExport: Date.now() });
+  haptic(12);
+  toast(`已匯出 ${n} 筆紀錄，資料安全 +1`, { icon: '📁' });
+}
+
+// ---------- 畫面切換 ----------
+const VIEWS = ['chat', 'stats', 'settings'];
+const TITLES = { chat: '隨手記帳', stats: '圖表', settings: '設定' };
+function setView(v) {
+  if (!VIEWS.includes(v)) v = 'chat';
+  const changed = v !== state.view;
+  state.view = v;
+  tip(null);
+  VIEWS.forEach(x => $('#view-' + x).classList.toggle('active', x === v));
+  $$('.tab').forEach(t => { const on = t.dataset.view === v; t.classList.toggle('active', on); t.setAttribute('aria-current', on ? 'page' : 'false'); });
+  $('#tab-ind').style.transform = `translateX(${VIEWS.indexOf(v) * 100}%)`;
+  $('#composer').hidden = v !== 'chat';
+  $('#month-strip').hidden = v !== 'chat';
+  $('#view-title').textContent = TITLES[v];
+  if (v === 'stats') { if (changed) state.animateStats = true; renderStats(); $('#view-stats').scrollTop = changed ? 0 : $('#view-stats').scrollTop; }
+  if (v === 'settings') renderSettings(true);
+  if (v === 'chat') renderChat(true);
+  if (changed) haptic(5);
+}
+
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    renderPill(); renderStrip(); updatePreview();
+    if (state.view === 'chat') renderChat();
+    if (state.view === 'stats') renderStats(false);
+    if (state.view === 'settings') renderSettings();
+  });
+}
+
+// ---------- 事件 ----------
+$('#composer').addEventListener('submit', e => { e.preventDefault(); input.dataset.last = input.value.trim(); submit(); });
+input.addEventListener('input', updatePreview);
+$('#quick-chips').addEventListener('click', e => { const b = e.target.closest('[data-chip]'); if (b) insertChip(b.dataset.chip); });
+$$('.tab').forEach(t => t.addEventListener('click', () => setView(t.dataset.view)));
+$('#month-strip').addEventListener('click', () => { state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1); setView('stats'); });
+$('#sync-pill').addEventListener('click', () => setView('settings'));
+$('#m-prev').addEventListener('click', () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1); state.catFilter = null; haptic(5); renderStats(true); });
+$('#m-next').addEventListener('click', () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1); state.catFilter = null; haptic(5); renderStats(true); });
+$('#cat-seg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.dataset.t === state.catType) return; state.catType = b.dataset.t; state.catFilter = null; haptic(5); renderDonut(inMonth(entries(), state.month)); renderDetail(inMonth(entries(), state.month)); });
+
+// 統一處理各種 data-* 按鈕
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-edit],[data-try],[data-act],[data-go],.lg-row');
+  if (!t) return;
+  if (t.dataset.edit) { openEdit(t.dataset.edit); return; }
+  if (t.dataset.try) { if (state.view !== 'chat') setView('chat'); input.value = t.dataset.try; updatePreview(); input.focus(); haptic(6); return; }
+  if (t.dataset.go) { setView(t.dataset.go); return; }
+  if (t.classList.contains('lg-row')) {
+    state.catFilter = state.catFilter === t.dataset.cat ? null : t.dataset.cat;
+    haptic(5);
+    renderDetail(inMonth(entries(), state.month));
+    if (state.catFilter) $('#detail-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const act = t.dataset.act;
+  if (act === 'more') { state.showCount += 60; renderChat(); }
+  else if (act === 'undo') undoLast(false);
+  else if (act === 'sample' || act === 'clear-sample') toggleSample();
+  else if (act === 'clear-filter') { state.catFilter = null; renderDetail(inMonth(entries(), state.month)); }
+  else if (act === 'budget-inline') {
+    const v = parseFloat(($('#budget-inline').value || '').replace(/[,$\s]/g, ''));
+    if (!(v > 0)) { $('#budget-inline').focus(); haptic([10, 40, 10]); return; }
+    S.setSettings({ budget: v }); state.animateStats = true; haptic(12); toast(`每月預算 ${money(v)} 設定好了 🎯`); renderStats(true);
+  } else if (act === 'cloud-save') {
+    const url = $('#sb-url').value.trim().replace(/\/+$/, ''), key = $('#sb-key').value.trim();
+    if (!/^https:\/\/.+/.test(url) || key.length < 20) { toast('請貼上正確的 Project URL 和 anon key', { icon: '⚠️' }); return; }
+    S.setCloudConfig({ url, key });
+    toast('連線中…', { icon: '☁️', duration: 1200 });
+    await S.initCloud();
+    renderSettings(true);
+    if (S.cloud.client) toast('已連上 Supabase！接著用 Google 登入', { icon: '☁️' });
+  } else if (act === 'cloud-remove') {
+    if (!(await dialog({ title: '中斷雲端連線？', body: '這台裝置的紀錄會保留，只是不再同步。', ok: '中斷連線', danger: true }))) return;
+    await S.signOut().catch(() => {}); S.setCloudConfig(null); await S.initCloud(); renderSettings(true); toast('已中斷連線');
+  } else if (act === 'signin') {
+    try { await S.signIn(); } catch (err) { toast('登入失敗：' + (err.message || err), { icon: '⚠️', duration: 5000 }); }
+  } else if (act === 'signin-email') {
+    const em = ($('#sb-email').value || '').trim();
+    if (!/^\S+@\S+\.\S+$/.test(em)) { $('#sb-email').focus(); haptic([10, 40, 10]); toast('請輸入正確的 Email', { icon: '⚠️' }); return; }
+    try { await S.signInEmail(em); haptic(12); toast('登入連結已寄出，到信箱點一下就完成 📬', { duration: 6000 }); }
+    catch (err) { toast('寄送失敗：' + (err.message || err), { icon: '⚠️', duration: 5000 }); }
+  } else if (act === 'signout') {
+    if (!(await dialog({ title: '要登出嗎？', body: '這台裝置上的紀錄會保留，下次登入會再同步。', ok: '登出' }))) return;
+    await S.signOut(); toast('已登出', { icon: '👋' });
+  } else if (act === 'sync-now') {
+    await S.sync();
+    if (S.cloud.status === 'idle') { haptic(12); toast('同步完成，資料都在雲端了 ☁️'); }
+  }
+});
+
+$('#budget-save').addEventListener('click', () => {
+  const raw = $('#budget-input').value.replace(/[,$\s]/g, '');
+  const v = raw ? parseFloat(raw) : 0;
+  if (raw && !(v >= 0)) { haptic([10, 40, 10]); return; }
+  S.setSettings({ budget: v || 0 });
+  haptic(12);
+  toast(v ? `每月預算 ${money(v)} 設定好了 🎯` : '已取消每月預算', { icon: v ? '🎯' : '✓' });
+});
+$('#export-btn').addEventListener('click', doExport);
+$('#import-btn').addEventListener('click', () => $('#import-file').click());
+$('#import-file').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const n = S.importCSV(await f.text());
+    haptic(12);
+    toast(n ? `匯入 ${n} 筆紀錄 ✓` : '檔案裡沒有找到紀錄', { icon: n ? '📥' : '🤔' });
+    if (n) confetti({ count: 60 });
+  } catch (err) { toast('匯入失敗：' + err.message, { icon: '⚠️', duration: 5000 }); }
+});
+$('#sample-btn').addEventListener('click', toggleSample);
+$('#clear-btn').addEventListener('click', async () => {
+  if (!entries().length) { toast('目前沒有紀錄', { icon: '📭' }); return; }
+  const ok = await dialog({ title: '清除所有紀錄？', body: `共 ${entries().length} 筆，清除後無法復原。${S.cloud.user ? '雲端上的資料也會一起刪除。' : ''}建議先匯出備份。`, ok: '全部清除', danger: true });
+  if (!ok) return;
+  S.clearAll(); state.ephemeral = []; state.fresh = null;
+  toast('已清除所有紀錄', { icon: '🧹' });
+});
+$('#install-btn').addEventListener('click', async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  await deferredInstall.userChoice.catch(() => {});
+  deferredInstall = null; renderInstall();
+});
+
+// 手機鍵盤打開時：讓畫面貼齊可視區、隱藏下方選單
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const onVV = () => {
+    const open = vv.height < window.innerHeight - 120 && document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    document.documentElement.classList.toggle('kb-open', !!open);
+    document.documentElement.style.setProperty('--vvh', vv.height + 'px');
+    if (open) { window.scrollTo(0, 0); if (state.view === 'chat') { const v = $('#view-chat'); v.scrollTop = v.scrollHeight; } }
+  };
+  vv.addEventListener('resize', onVV);
+  input.addEventListener('blur', () => setTimeout(onVV, 50));
+}
+
+let resizeT;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (state.view === 'stats') renderStats(false); }, 200); });
+
+// 雲端狀態變化的提示
+let prevStatus = S.cloud.status, firstSyncToast = false;
+S.onChange(() => {
+  const st = S.cloud.status;
+  if (st !== prevStatus) {
+    if (st === 'idle' && prevStatus === 'syncing' && !firstSyncToast) { firstSyncToast = true; toast('雲端同步完成，資料已安全備份 ☁️'); }
+    prevStatus = st;
+  }
+  scheduleRender();
+});
+
+// ---------- Service worker ----------
+if ('serviceWorker' in navigator && !inFrame && /^https?:/.test(location.protocol)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        w && w.addEventListener('statechange', () => {
+          if (w.state === 'installed' && navigator.serviceWorker.controller) {
+            toast('有新版本囉', { icon: '🆕', action: '更新', duration: 10000, onAction: () => w.postMessage('skipWaiting') });
+          }
+        });
+      });
+    }).catch(err => console.warn('SW', err));
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  });
+}
+
+// ---------- 開始 ----------
+renderPill(); renderStrip(); quickChips(); updatePreview();
+setView(location.hash === '#charts' ? 'stats' : 'chat');
+S.initCloud();
