@@ -66,6 +66,7 @@ create policy "own notes" on public.love_notes for all using (auth.uid() = user_
 create or replace function public.love_notes_reset_seen()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   if new.body is distinct from old.body then
@@ -104,7 +105,7 @@ create or replace function public.love_feed(p_token text, p_mark boolean default
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   s public.love_shares%rowtype;
@@ -148,7 +149,7 @@ create or replace function public.love_heart(p_token text, p_note uuid, p_n inte
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   uid uuid;
