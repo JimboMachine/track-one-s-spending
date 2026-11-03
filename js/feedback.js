@@ -29,7 +29,7 @@ export function toast(msg, { icon = '✓', action, onAction, duration = 2600 } =
 
 // ---------- 彩帶 ----------
 let raf = null, parts = [];
-export function confetti({ count = 90, colors, origin } = {}) {
+export function confetti({ count = 90, colors, origin, hearts = false } = {}) {
   if (reduceMotion()) return;
   const cv = document.getElementById('confetti');
   if (!cv) return;
@@ -45,6 +45,7 @@ export function confetti({ count = 90, colors, origin } = {}) {
     parts.push({
       x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
       w: 6 + Math.random() * 6, h: 4 + Math.random() * 5, c: colors[i % colors.length], life: 0, round: Math.random() < 0.3,
+      heart: hearts, s: 7 + Math.random() * 7,
     });
   }
   if (raf) return;
@@ -57,7 +58,13 @@ export function confetti({ count = 90, colors, origin } = {}) {
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
       ctx.globalAlpha = Math.max(0, 1 - p.life / 150);
       ctx.fillStyle = p.c;
-      if (p.round) { ctx.beginPath(); ctx.arc(0, 0, p.h / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
+      if (p.heart) {
+        const s = p.s; ctx.rotate(-p.r * 0.85);
+        ctx.beginPath(); ctx.moveTo(0, s * 0.35);
+        ctx.bezierCurveTo(-s, -s * 0.25, -s * 0.45, -s, 0, -s * 0.45);
+        ctx.bezierCurveTo(s * 0.45, -s, s, -s * 0.25, 0, s * 0.35);
+        ctx.fill();
+      } else if (p.round) { ctx.beginPath(); ctx.arc(0, 0, p.h / 2 + 1, 0, Math.PI * 2); ctx.fill(); }
       else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.life / 8)) + 1);
       ctx.restore();
     }
@@ -91,9 +98,12 @@ export const PHRASES = {
   income: ['入帳囉！辛苦了 💰', '收入 +1，太棒了 🎉', '錢錢進來了 💰', '有進帳，讚啦 🙌'],
   first: '第一筆記帳完成！好的開始是成功的一半 🎉',
 };
-export const pickGeneric = () => pick(PHRASES.generic) + ' ' + pick(PHRASES.emoji);
+export const pickGeneric = (name = '') => (name && Math.random() < 0.35)
+  ? pick([`做得好，${name}！`, `${name} 好棒，又記一筆！`, `謝謝 ${name}，記好了！`]) + ' ' + pick(PHRASES.emoji)
+  : pick(PHRASES.generic) + ' ' + pick(PHRASES.emoji);
 export const pickIncome = () => pick(PHRASES.income);
-export const greeting = () => {
+export const greeting = (name = '') => {
   const h = new Date().getHours();
-  return h < 5 ? '夜深了，記完早點休息 🌙' : h < 11 ? '早安 ☀️' : h < 14 ? '午安 🌤️' : h < 18 ? '午後好 ☕' : '晚安 🌙';
+  const [w, e] = h < 5 ? ['夜深了', '🌙'] : h < 11 ? ['早安', '☀️'] : h < 14 ? ['午安', '🌤️'] : h < 18 ? ['午後好', '☕'] : ['晚安', '🌙'];
+  return name ? `${w}，${name} ${e}` : `${w} ${e}`;
 };

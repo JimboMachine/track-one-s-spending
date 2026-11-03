@@ -1,6 +1,9 @@
 // 資料層：先存在瀏覽器（離線也能用），有設定 Supabase 並登入後自動雙向同步
 
-const K = { entries: 'jz_entries', deleted: 'jz_deleted', learned: 'jz_learned', settings: 'jz_settings', cloud: 'jz_supabase' };
+const K = {
+  entries: 'jz_entries', deleted: 'jz_deleted', learned: 'jz_learned', settings: 'jz_settings', cloud: 'jz_supabase',
+  prefsMeta: 'jz_prefs_meta', love: 'jz_love', loveDeleted: 'jz_love_deleted', share: 'jz_share',
+};
 const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn(e); } };
 
@@ -77,11 +80,90 @@ export function learn(note, type, category) {
   const key = (note || '').trim().toLowerCase();
   if (!key || key.length > 20) return;
   const l = getLearned(); l[key] = { type, category }; save(K.learned, l);
+  markPrefs();
 }
 
-// ---------- 設定 ----------
+// ---------- 設定（預算、個人資料、徽章會一起同步到雲端） ----------
+const PREF_KEYS = ['budget', 'profile', 'badges', 'badgeAt'];
+function markPrefs() { save(K.prefsMeta, { dirty: true, updatedAt: new Date().toISOString() }); scheduleSync(); }
 export const getSettings = () => ({ budget: 0, ...load(K.settings, {}) });
-export const setSettings = patch => { save(K.settings, { ...getSettings(), ...patch }); emit(); };
+export const setSettings = patch => {
+  save(K.settings, { ...getSettings(), ...patch });
+  if (Object.keys(patch).some(k => PREF_KEYS.includes(k))) markPrefs();
+  emit();
+};
+export const getProfile = () => ({ name: '', bio: '', avatar: null, accent: 'jade', mode: 'system', cover: 'aurora', goal: null, ...(getSettings().profile || {}) });
+export const setProfile = patch => setSettings({ profile: { ...getProfile(), ...patch } });
+function collectPrefs() {
+  const s = getSettings();
+  return { budget: s.budget || 0, profile: s.profile || {}, badges: s.badges || [], badgeAt: s.badgeAt || {}, learned: getLearned() };
+}
+function applyPrefs(d, at) {
+  const s = getSettings();
+  const badges = [...new Set([...(s.badges || []), ...(d.badges || [])])];
+  save(K.settings, { ...s, budget: d.budget ?? s.budget, profile: d.profile || s.profile, badges, badgeAt: { ...(d.badgeAt || {}), ...(s.badgeAt || {}) } });
+  save(K.learned, { ...getLearned(), ...(d.learned || {}) });
+  save(K.prefsMeta, { dirty: false, updatedAt: at });
+}
+
+// ---------- 每日情話 ----------
+let love = load(K.love, []);
+let loveDeleted = load(K.loveDeleted, []);
+const persistLove = () => { save(K.love, love); save(K.loveDeleted, loveDeleted); emit(); scheduleSync(); };
+export const getLove = () => love;
+export function addLove(body, date) {
+  const now = new Date().toISOString();
+  const n = { id: uuid(), date, body, createdAt: now, updatedAt: now, hearts: 0, seenAt: null, _dirty: true };
+  love.push(n); persistLove(); return n;
+}
+export function updateLove(id, body) {
+  const n = love.find(x => x.id === id); if (!n) return;
+  // 內容改了，就等她再看一次（雲端也會同步重設）
+  Object.assign(n, { body, seenAt: null, updatedAt: new Date().toISOString(), _dirty: true }); persistLove();
+}
+export function deleteLove(id) {
+  const n = love.find(x => x.id === id); if (!n) return null;
+  if (n._synced) loveDeleted.push(id);
+  love = love.filter(x => x.id !== id); persistLove(); return n;
+}
+export function restoreLove(n) {
+  loveDeleted = loveDeleted.filter(id => id !== n.id);
+  love = love.filter(x => x.id !== n.id);
+  love.push({ ...n, _dirty: true }); persistLove();
+}
+
+// 她的專屬連結
+export const getShare = () => load(K.share, null);
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(16).padStart(2, '0')).join('');
+function shareSnapshot() {
+  const p = getProfile();
+  const av = p.avatar ? (p.avatar.kind === 'photo' ? p.avatar.value : p.avatar.value) : '';
+  return { name: p.name || '', avatar: av || '', accent: p.accent || 'jade' };
+}
+export async function enableShare(reset = false) {
+  if (!cloud.client || !cloud.user) throw new Error('請先開啟雲端同步並登入');
+  const cur = getShare();
+  const token = reset || !cur ? randomToken() : cur.token;
+  const { error } = await cloud.client.from('love_shares').upsert({ user_id: cloud.user.id, token, ...shareSnapshot(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) throw new Error(/love_shares/.test(error.message) ? '請先在 Supabase 重新執行最新的 supabase.sql' : error.message);
+  save(K.share, { token }); emit();
+  return token;
+}
+export async function disableShare() {
+  if (cloud.client && cloud.user) {
+    const { error } = await cloud.client.from('love_shares').delete().eq('user_id', cloud.user.id);
+    if (error) throw error;
+  }
+  localStorage.removeItem(K.share); emit();
+}
+export function shareLink(token) {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'love.html';
+  const cfg = getCloudConfig();
+  const usesFileConfig = DEFAULT_CLOUD && cfg && cfg.url === DEFAULT_CLOUD.url;
+  return usesFileConfig ? `${base}?t=${token}` : `${base}?t=${token}&u=${encodeURIComponent(cfg.url)}&k=${encodeURIComponent(cfg.key)}`;
+}
+// 她看過、回了愛心時通知畫面
+export const loveNews = { hearts: 0, seen: 0 };
 
 // ---------- CSV ----------
 const CSV_HEAD = ['日期', '類型', '分類', '金額', '備註', '原始訊息', 'id'];
@@ -146,7 +228,7 @@ const DEFAULT_CLOUD = (window.JZ_CONFIG && window.JZ_CONFIG.supabaseUrl) ? { url
 export const getCloudConfig = () => load(K.cloud, null) || DEFAULT_CLOUD;
 export const setCloudConfig = cfg => { if (cfg) save(K.cloud, cfg); else localStorage.removeItem(K.cloud); };
 
-export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null };
+export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null, extraError: null };
 const setStatus = (s, err = null) => { cloud.status = s; cloud.error = err; emit(); };
 
 export async function initCloud() {
@@ -185,7 +267,9 @@ export async function signOut() {
   cloud.user = null;
   // 登出後本機資料標記為未同步，避免下次登入別的帳號時被誤刪
   entries.forEach(e => { e._dirty = true; delete e._synced; }); deleted = [];
-  save(K.entries, entries); save(K.deleted, deleted);
+  love.forEach(n => { n._dirty = true; delete n._synced; }); loveDeleted = [];
+  save(K.entries, entries); save(K.deleted, deleted); save(K.love, love); save(K.loveDeleted, loveDeleted);
+  localStorage.removeItem(K.share);
   setStatus('signedout');
 }
 
@@ -226,6 +310,7 @@ export async function sync() {
     const dirtyIds = new Set(stillDirty.map(e => e.id));
     entries = [...rows.map(fromRow).filter(e => !dirtyIds.has(e.id)), ...stillDirty];
     save(K.entries, entries); save(K.deleted, deleted);
+    await syncExtras();
     cloud.lastSync = new Date();
     setStatus('idle');
   } catch (e) {
@@ -235,6 +320,70 @@ export async function sync() {
   } finally {
     syncing = false;
     if (again) { again = false; sync(); }
+  }
+}
+
+// 個人資料、情話、分享連結：失敗不影響記帳同步
+const toLoveRow = n => ({ id: n.id, date: n.date, body: n.body, created_at: n.createdAt, updated_at: n.updatedAt });
+async function syncExtras() {
+  const db = cloud.client;
+  const uid = cloud.user.id;
+  try {
+    // 個人資料（較新的那一份為準）
+    const meta = load(K.prefsMeta, { dirty: false, updatedAt: null });
+    const { data: row, error: pe } = await db.from('profiles').select('data, updated_at').eq('user_id', uid).maybeSingle();
+    if (pe) throw pe;
+    const remoteAt = row ? Date.parse(row.updated_at) : 0;
+    const localAt = meta.updatedAt ? Date.parse(meta.updatedAt) : 0;
+    if (row && remoteAt > localAt) applyPrefs(row.data || {}, row.updated_at);
+    else if (meta.dirty || !row) {
+      const at = meta.updatedAt || new Date().toISOString();
+      const { error } = await db.from('profiles').upsert({ user_id: uid, data: collectPrefs(), updated_at: at }, { onConflict: 'user_id' });
+      if (error) throw error;
+      save(K.prefsMeta, { dirty: false, updatedAt: at });
+      if (getShare()) await db.from('love_shares').update({ ...shareSnapshot(), updated_at: at }).eq('user_id', uid);
+    }
+
+    // 情話
+    const ld = love.filter(n => n._dirty);
+    if (ld.length) {
+      const { error } = await db.from('love_notes').upsert(ld.map(toLoveRow), { onConflict: 'id' });
+      if (error) throw error;
+      const ids = new Set(ld.map(n => n.id));
+      love.forEach(n => { if (ids.has(n.id)) { n._dirty = false; n._synced = true; } });
+    }
+    if (loveDeleted.length) {
+      const { error } = await db.from('love_notes').delete().in('id', loveDeleted);
+      if (error) throw error;
+      loveDeleted = [];
+    }
+    const { data: notes, error: le } = await db.from('love_notes').select('*').order('created_at').limit(2000);
+    if (le) throw le;
+    const before = new Map(love.map(n => [n.id, n]));
+    let hearts = 0, seen = 0;
+    const merged = notes.map(r => {
+      const old = before.get(r.id);
+      if (old && old._synced) {
+        hearts += Math.max(0, (r.hearts || 0) - (old.hearts || 0));
+        if (r.seen_at && !old.seenAt) seen++;
+      }
+      return { id: r.id, date: r.date, body: r.body, createdAt: r.created_at, updatedAt: r.updated_at, seenAt: r.seen_at, hearts: r.hearts || 0, heartedAt: r.hearted_at, _synced: true };
+    });
+    const still = love.filter(n => n._dirty);
+    const stillIds = new Set(still.map(n => n.id));
+    love = [...merged.filter(n => !stillIds.has(n.id)), ...still];
+    save(K.love, love); save(K.loveDeleted, loveDeleted);
+    loveNews.hearts += hearts; loveNews.seen += seen;
+
+    // 分享連結（換裝置時找回）
+    if (!getShare()) {
+      const { data: sh } = await db.from('love_shares').select('token').eq('user_id', uid).maybeSingle();
+      if (sh && sh.token) save(K.share, { token: sh.token });
+    }
+    cloud.extraError = null;
+  } catch (e) {
+    console.warn('extras', e);
+    cloud.extraError = /profiles|love_/.test(e.message || '') ? '個人資料和情話要同步，請在 Supabase 重新執行最新的 supabase.sql' : (e.message || '個人資料同步失敗');
   }
 }
 
