@@ -2,6 +2,6 @@
 // 也可以不改這個檔案，直接在 App 的「設定 → 雲端同步」貼上這兩個值。
 // anon key 是公開金鑰，可以放在網頁裡；資料安全由 supabase.sql 裡的權限規則保護。
 window.JZ_CONFIG = {
-  supabaseUrl: '',      // 例如 'https://abcdefgh.supabase.co'
-  supabaseAnonKey: '',  // 例如 'eyJhbGciOiJIUzI1NiIsInR5cCI6...'
+  supabaseUrl: 'https://sacpahvcqvdrkwqxfkso.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhY3BhaHZjcXZkcmt3cXhma3NvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MzU1MjUsImV4cCI6MjEwOTMxMTUyNX0.orejUdjP6LNsJD2By7QtIY7HJk_bjIQV3nxRx1kq1fw',
 };
