@@ -314,7 +314,7 @@ function rowHTML(e, showDateTag = true, createdDay = null) {
   const c = categoryInfo(e.type, e.category);
   const tag = showDateTag && e.date !== createdDay ? `<span class="tag">${relDay(e.date)}</span>` : '';
   return `<button class="rc-row${state.flash === e.id ? ' pop' : ''}" type="button" data-edit="${e.id}"><span class="rc-in">
-    <span class="rc-ico" aria-hidden="true">${c.icon}</span>
+    <span class="rc-ico" aria-hidden="true">${NOTE_ICON[e.note] || c.icon}</span>
     <span class="rc-txt"><span class="rc-note">${esc(e.note)}</span><span class="rc-meta">${e.note === e.category ? (e.type === 'income' ? '收入' : '支出') : esc(e.category)}${tag}${metaTags(e)}</span></span>
     <span class="amt${e.type === 'income' ? ' inc' : ''}">${signed(e)}</span></span></button>`;
 }
@@ -1215,6 +1215,10 @@ function renderSettings(force = false) {
   const last = st.lastExport;
   $('#backup-sub').textContent = last ? `上次備份：${relDay(toISO(new Date(last)))}` : '還沒備份過';
   $('#sample-btn').textContent = S.hasSample() ? '清除範例' : '載入範例';
+  const tn = S.getTrash().length;
+  $('#trash-sub').textContent = tn ? `${tn} 筆，30 天後自動清掉` : '刪掉的紀錄保留 30 天，隨時救回';
+  $('#trash-btn').textContent = tn ? '查看' : '空的';
+  $('#trash-btn').disabled = !tn;
   renderInstall();
   const cfg = S.getCloudConfig();
   const key = [S.cloud.status, S.cloud.errorKind, S.cloud.user?.id, !!cfg, S.cloud.error, S.cloud.lastSync && hhmm(S.cloud.lastSync.toISOString()), inFrame].join('|');
@@ -1553,7 +1557,7 @@ function renderBookHero(list, isCur, mo) {
   else if (s.myDiff > 0) line = `${other ? esc(other.name) : '對方'}要給你 <b>${money(Math.round(s.myDiff))}</b>`;
   else line = `你要給${other ? esc(other.name) : '對方'} <b>${money(Math.round(-s.myDiff))}</b>`;
   hero.innerHTML = `<div class="bh-top"><span>👫 ${esc(book.name)} · ${isCur ? '本月' : `${mo + 1}月`}共同支出</span><b class="bh-total">${money(s.total)}</b></div>
-    <div class="bh-people">${book.members.map(m => `<div class="bh-p"><span class="avatar sm">${esc(m.avatar || [...(m.name || '?')][0])}</span><span>${esc(m.me ? '我' : m.name)}付了</span><b>${money(s.paid[m.id] || 0)}</b></div>`).join('')}</div>
+    <div class="bh-people">${book.members.map(m => `<div class="bh-p"><span class="avatar sm">${avaFace(m.avatar || [...(m.name || '?')][0])}</span><span>${esc(m.me ? '我' : m.name)}付了</span><b>${money(s.paid[m.id] || 0)}</b></div>`).join('')}</div>
     <div class="bh-settle">${line}${book.members.length > 1 && s.total ? `<small>（每人 ${money(Math.round(s.share))}）</small>` : ''}</div>`;
   void nameOf;
 }
@@ -1564,7 +1568,7 @@ function renderBookCard() {
   if (book) {
     const alone = book.members.length < 2;
     card.innerHTML = `<div class="card-head"><h2>👫 ${esc(book.name)}</h2><span class="card-sub">${book.members.length} 人</span></div>
-      <div class="bh-people" style="margin-bottom:10px">${book.members.map(m => `<div class="bh-p"><span class="avatar sm">${esc(m.avatar || [...(m.name || '?')][0])}</span><span>${esc(m.me ? `${m.name}（我）` : m.name)}</span></div>`).join('')}</div>
+      <div class="bh-people" style="margin-bottom:10px">${book.members.map(m => `<div class="bh-p"><span class="avatar sm">${avaFace(m.avatar || [...(m.name || '?')][0])}</span><span>${esc(m.me ? `${m.name}（我）` : m.name)}</span></div>`).join('')}</div>
       ${alone ? `<p class="note" style="margin:0 0 8px">把邀請碼傳給她，她登入後在這裡輸入就能加入：</p>` : ''}
       <div class="invite"><span>邀請碼</span><b>${esc(book.code)}</b><button class="btn ghost sm" type="button" data-act="book-copy">複製</button>${navigator.share ? '<button class="btn ghost sm" type="button" data-act="book-share">傳給她</button>' : ''}</div>
       <p class="note" style="margin:10px 0">記帳時加上「#一起」，或點輸入框上方的「👫 共同」，就會記進共同帳本。圖表頁可以切換看共同支出和誰該補多少。</p>
@@ -1920,20 +1924,83 @@ async function doExport() {
   toast(`已匯出 ${n} 筆紀錄，資料安全 +1`, { icon: '📁' });
 }
 
+// ---------- 最近刪除 ----------
+async function openTrash() {
+  const list = S.getTrash();
+  if (!list.length) { toast('最近刪除是空的', { icon: '🗑️' }); return; }
+  const left = t => Math.max(1, 30 - Math.floor((Date.now() - Date.parse(t.deletedAt)) / 864e5));
+  const row = t => `<label class="tr-row"><input type="checkbox" data-tr="${t.id}" checked>
+      <span class="rc-ico" aria-hidden="true">${categoryInfo(t.type, t.category).icon}</span>
+      <span class="rc-txt"><span class="rc-note">${esc(t.note || t.category)}</span><span class="rc-meta">${relDay(t.date)} · 還剩 ${left(t)} 天</span></span>
+      <span class="amt${t.type === 'income' ? ' inc' : ''}">${signed(t)}</span></label>`;
+  let picked = [];
+  const ok = await dialog({
+    title: `最近刪除 · ${list.length} 筆`, ok: '救回勾選的', cancel: '關閉',
+    body: '勾選想救回的紀錄，30 天後會自動清掉。',
+    extra: `<div class="tr-list">${list.slice(0, 300).map(row).join('')}</div>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><button class="linkish" type="button" data-tr-all>全不選</button><button class="linkish danger-link" type="button" data-tr-purge>永久刪除勾選的</button></div>`,
+    onOpen: (w, done) => {
+      const boxes = () => $$('[data-tr]', w);
+      const sync = () => {
+        const n = boxes().filter(b => b.checked).length;
+        const okb = $('[data-r="1"]', w);
+        okb.textContent = n ? `救回 ${n} 筆` : '救回勾選的'; okb.disabled = !n;
+        $('[data-tr-all]', w).textContent = n === boxes().length ? '全不選' : '全選';
+      };
+      w.addEventListener('change', sync); sync();
+      $('[data-tr-all]', w).addEventListener('click', () => { const all = boxes().every(b => b.checked); boxes().forEach(b => { b.checked = !all; }); sync(); haptic(5); });
+      $('[data-tr-purge]', w).addEventListener('click', async () => {
+        const ids = boxes().filter(b => b.checked).map(b => b.dataset.tr); if (!ids.length) return;
+        w.hidden = true;
+        const sure = await dialog({ title: `永久刪除 ${ids.length} 筆？`, body: '這次就真的救不回來了。', ok: '永久刪除', danger: true });
+        w.hidden = false;
+        if (!sure) return;
+        S.purgeTrash(ids); haptic(10); done(false); renderSettings(true);
+        toast(`已永久刪除 ${ids.length} 筆`, { icon: '🗑️' });
+      });
+    },
+    onOk: w => { picked = $$('[data-tr]', w).filter(b => b.checked).map(b => b.dataset.tr); if (!picked.length) return false; },
+  });
+  if (!ok || !picked.length) return;
+  const back = S.restoreFromTrash(picked);
+  haptic([10, 30, 10]); state.animateStats = true;
+  toast(`救回 ${back.length} 筆了 ✓`, { icon: '♻️' });
+  renderSettings(true);
+}
+
+// 沒開雲端的人，每週提醒備份一次
+function backupNag() {
+  if (S.cloud.user || inFrame) return;
+  const own = entries().filter(e => !e.sample);
+  if (own.length < 15) return;
+  const st = S.getSettings();
+  const since = st.lastExport || Date.parse(own.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), own[0].createdAt));
+  if (Date.now() - since < 7 * 864e5) return;
+  let last = 0;
+  try { last = Number(localStorage.getItem('jz_backup_nag') || 0); } catch { /* 無痕模式 */ }
+  if (Date.now() - last < 3 * 864e5) return;
+  try { localStorage.setItem('jz_backup_nag', String(Date.now())); } catch { /* 無痕模式 */ }
+  setTimeout(() => toast(`${own.length} 筆紀錄只存在這支手機，備份一下比較安心`, { icon: '🛟', duration: 7000, action: '匯出', onAction: doExport }), 2500);
+}
+
 // ---------- 我的：個人頁 ----------
 const ACCENTS = [
   { id: 'jade', name: '翡翠', c: '#0a8a65' }, { id: 'ocean', name: '海洋', c: '#1f6fd1' }, { id: 'sakura', name: '櫻花', c: '#c93d72' },
   { id: 'sunset', name: '夕陽', c: '#bf550b' }, { id: 'lavender', name: '薰衣草', c: '#6a4fd0' }, { id: 'ink', name: '墨黑', c: '#2b3038' },
+  { id: 'alien', name: '三眼怪', c: '#3a8212' },
 ];
-const COVERS = [{ id: 'aurora', name: '極光' }, { id: 'ledger', name: '帳本' }, { id: 'dots', name: '圓點' }, { id: 'stripes', name: '斜紋' }, { id: 'plain', name: '純色' }];
-const AVATAR_EMOJI = ['🐻', '🐱', '🐶', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸', '🐧', '🦄', '🐳', '🌻', '🍀', '⭐', '😎'];
+const COVERS = [{ id: 'aurora', name: '極光' }, { id: 'ledger', name: '帳本' }, { id: 'dots', name: '圓點' }, { id: 'stripes', name: '斜紋' }, { id: 'alien', name: '外星' }, { id: 'plain', name: '純色' }];
+const AVATAR_EMOJI = ['🐻', '🐱', '🐶', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸', '🐧', '🦄', '🐳', '🌻', '🍀', '⭐', '😎', 'alien3', '🛸'];
+// 三眼怪頭像（原創圖）：存成 'alien3' 這個代號
+const ALIEN_SVG = "<svg class='alien-svg' aria-hidden='true' viewBox='0 0 64 64'> <g stroke='#24501a' stroke-width='2.5' stroke-linecap='round' fill='none'><path d='M24 16 18 6'/><path d='M40 16 46 6'/></g> <circle cx='18' cy='6' r='3.6' fill='#ffd84d' stroke='#24501a' stroke-width='2'/><circle cx='46' cy='6' r='3.6' fill='#ffd84d' stroke='#24501a' stroke-width='2'/> <path d='M32 13c13.5 0 23 9.5 23 22.5C55 48 45 58 32 58S9 48 9 35.5C9 22.5 18.5 13 32 13z' fill='#8fdc4a' stroke='#24501a' stroke-width='2.5'/> <circle cx='17.5' cy='43' r='3.6' fill='#ff9fb8' opacity='.55'/><circle cx='46.5' cy='43' r='3.6' fill='#ff9fb8' opacity='.55'/> <circle cx='20.5' cy='32' r='6.2' fill='#fff' stroke='#24501a' stroke-width='2'/><circle cx='32' cy='26.5' r='7.4' fill='#fff' stroke='#24501a' stroke-width='2'/><circle cx='43.5' cy='32' r='6.2' fill='#fff' stroke='#24501a' stroke-width='2'/> <circle cx='21.4' cy='33' r='3' fill='#1d2433'/><circle cx='33' cy='27.6' r='3.6' fill='#1d2433'/><circle cx='44.4' cy='33' r='3' fill='#1d2433'/> <circle cx='22.4' cy='31.8' r='1' fill='#fff'/><circle cx='34.3' cy='26.2' r='1.2' fill='#fff'/><circle cx='45.4' cy='31.8' r='1' fill='#fff'/> <path d='M25.5 45.5q6.5 5.5 13 0' stroke='#24501a' stroke-width='2.5' stroke-linecap='round' fill='none'/> </svg>";
+const avaFace = v => (v === 'alien3' ? ALIEN_SVG : esc(v));
 const PERSON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
 const isPhoto = v => typeof v === 'string' && /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(v);
 
 function avatarHTML(p, fallback = 'icon') {
   const a = p.avatar;
   if (a && a.kind === 'photo' && isPhoto(a.value)) return `<img src="${a.value}" alt="">`;
-  if (a && a.kind === 'emoji' && a.value) return esc(a.value);
+  if (a && a.kind === 'emoji' && a.value) return avaFace(a.value);
   if (p.name) return esc([...p.name.trim()][0] || '🙂');
   return fallback === 'icon' ? PERSON_SVG : '🙂';
 }
@@ -2261,8 +2328,8 @@ function renderPSheet() {
   $('#p-ava-preview').innerHTML = avatarHTML({ ...p, name: $('#p-name').value.trim() }, 'smile');
   $('#p-photo-clear').hidden = !(p.avatar && p.avatar.kind === 'photo');
   const cur = p.avatar && p.avatar.kind === 'emoji' ? p.avatar.value : null;
-  $('#p-emojis').innerHTML = AVATAR_EMOJI.map(e => `<button type="button" class="emo${e === cur ? ' on' : ''}" data-emo="${e}" role="radio" aria-checked="${e === cur}" aria-label="頭像 ${e}">${e}</button>`).join('');
-  $('#p-accents').innerHTML = ACCENTS.map(a => `<button type="button" class="sw-btn${a.id === p.accent ? ' on' : ''}" data-accent="${a.id}" role="radio" aria-checked="${a.id === p.accent}"><span class="sw-dot" style="background:${a.c}">${a.id === p.accent ? '✓' : ''}</span>${a.name}</button>`).join('');
+  $('#p-emojis').innerHTML = AVATAR_EMOJI.map(e => `<button type="button" class="emo${e === cur ? ' on' : ''}" data-emo="${e}" role="radio" aria-checked="${e === cur}" aria-label="頭像 ${e === 'alien3' ? '三眼怪' : e}">${avaFace(e)}</button>`).join('');
+  $('#p-accents').innerHTML = ACCENTS.map(a => `<button type="button" class="sw-btn${a.id === p.accent ? ' on' : ''}" data-accent="${a.id}" role="radio" aria-checked="${a.id === p.accent}"><span class="sw-dot${a.id === 'alien' ? ' alien' : ''}" style="background:${a.c}">${a.id === p.accent ? '✓' : ''}</span>${a.name}</button>`).join('');
   $$('#p-mode button').forEach(b => b.classList.toggle('on', b.dataset.m === (p.mode || 'system')));
   $('#p-covers').innerHTML = COVERS.map(c => `<button type="button" class="cv-btn${c.id === p.cover ? ' on' : ''}" data-cover="${c.id}" role="radio" aria-checked="${c.id === p.cover}"><span class="cover" data-cover="${c.id}"></span>${c.name}</button>`).join('');
 }
@@ -2296,7 +2363,11 @@ psheet.addEventListener('click', e => {
   if (!pdraft) return;
   const emo = e.target.closest('[data-emo]'), acc = e.target.closest('.sw-btn'), cov = e.target.closest('.cv-btn'), mode = e.target.closest('#p-mode button');
   if (emo) pdraft.avatar = { kind: 'emoji', value: emo.dataset.emo };
-  else if (acc) { pdraft.accent = acc.dataset.accent; applyTheme(pdraft); }
+  else if (acc) {
+    pdraft.accent = acc.dataset.accent; applyTheme(pdraft);
+    // 三眼怪是整套主題：順便換上外星封面
+    if (pdraft.accent === 'alien' && pdraft.cover !== 'alien') { pdraft.cover = 'alien'; toast('三眼怪主題登陸 🛸 封面也一起換了', { icon: '👽' }); }
+  }
   else if (cov) pdraft.cover = cov.dataset.cover;
   else if (mode) { pdraft.mode = mode.dataset.m; applyTheme(pdraft); }
   else return;
@@ -2342,6 +2413,10 @@ enableSwipe(psheet, () => closeProfile(false));
 // ---------- 畫面切換 ----------
 const VIEWS = ['chat', 'stats', 'settings'];
 const TITLES = { chat: '隨手記帳', stats: '圖表', settings: '我的' };
+// 桌機寬螢幕：左邊聊天、右邊圖表一起顯示
+const wideMQ = matchMedia('(min-width: 1100px)');
+const isWide = () => wideMQ.matches;
+const paired = () => isWide() && state.view !== 'settings';
 function setView(v) {
   if (!VIEWS.includes(v)) v = 'chat';
   const changed = v !== state.view;
@@ -2350,9 +2425,13 @@ function setView(v) {
   VIEWS.forEach(x => $('#view-' + x).classList.toggle('active', x === v));
   $$('.tab').forEach(t => { const on = t.dataset.view === v; t.classList.toggle('active', on); t.setAttribute('aria-current', on ? 'page' : 'false'); });
   $('#tab-ind').style.transform = `translateX(${VIEWS.indexOf(v) * 100}%)`;
-  $('#composer').hidden = v !== 'chat';
-  $('#month-strip').hidden = v !== 'chat';
+  const pair = isWide() && v !== 'settings';
+  document.documentElement.classList.toggle('paired', pair);
+  if (pair) { $('#view-chat').classList.add('active'); $('#view-stats').classList.add('active'); }
+  $('#composer').hidden = !(v === 'chat' || pair);
+  $('#month-strip').hidden = !(v === 'chat' || pair);
   $('#view-title').textContent = TITLES[v];
+  if (pair && v === 'chat') renderStats(false);
   if (v === 'stats') { if (changed) state.animateStats = true; renderStats(); $('#view-stats').scrollTop = changed ? 0 : $('#view-stats').scrollTop; }
   if (v === 'settings') {
     renderSettings(true); renderMe(changed);
@@ -2375,8 +2454,8 @@ function scheduleRender() {
     if (bookKey !== (S.getBook()?.id || '')) { bookKey = S.getBook()?.id || ''; renderComposerExtras(); }
     renderTabAva();
     renderPill(); renderStrip(); updatePreview();
-    if (state.view === 'chat') renderChat();
-    if (state.view === 'stats') { renderStats(false); renderSearch(); }
+    if (state.view === 'chat' || paired()) renderChat();
+    if (state.view === 'stats' || paired()) { renderStats(false); renderSearch(); }
     if (state.view === 'settings') { renderSettings(); renderMe(false); }
   });
 }
@@ -2516,12 +2595,13 @@ $('#import-file').addEventListener('change', async e => {
   } catch (err) { toast('匯入失敗：' + err.message, { icon: '⚠️', duration: 5000 }); }
 });
 $('#sample-btn').addEventListener('click', toggleSample);
+$('#trash-btn').addEventListener('click', openTrash);
 $('#clear-btn').addEventListener('click', async () => {
   if (!entries().length) { toast('目前沒有紀錄', { icon: '📭' }); return; }
-  const ok = await dialog({ title: '清除所有紀錄？', body: `共 ${entries().length} 筆，清除後無法復原。${S.cloud.user ? '雲端上的資料也會一起刪除。' : ''}建議先匯出備份。`, ok: '全部清除', danger: true });
+  const ok = await dialog({ title: '清除所有紀錄？', body: `共 ${entries().length} 筆。${S.cloud.user ? '雲端上的也會一起刪除，' : ''}30 天內可以在「最近刪除」救回來。`, ok: '全部清除', danger: true });
   if (!ok) return;
   S.clearAll(); state.ephemeral = []; state.fresh = null;
-  toast('已清除所有紀錄', { icon: '🧹' });
+  toast('已清除，30 天內可以救回', { icon: '🧹', action: '查看', onAction: openTrash });
 });
 $('#install-btn').addEventListener('click', async () => {
   if (!deferredInstall) return;
@@ -2544,7 +2624,8 @@ if (window.visualViewport) {
 }
 
 let resizeT;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (state.view === 'stats') renderStats(false); }, 200); });
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (state.view === 'stats' || paired()) renderStats(false); }, 200); });
+wideMQ.addEventListener('change', () => setView(state.view));
 
 // 雲端狀態變化的提示
 let prevStatus = S.cloud.status, firstSyncToast = false;
@@ -2600,6 +2681,7 @@ applyCustomCats();
 runRecurring();
 recurringHeadsUp();
 recapPrompt();
+backupNag();
 renderComposerExtras();
 checkBadges();
 renderTabAva(); renderPill(); renderStrip(); quickChips(); updatePreview();

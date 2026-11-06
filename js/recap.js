@@ -14,7 +14,9 @@ export function recapStats(all, from, to, prevFrom, prevTo, catInfo) {
   const fav = Object.entries(byNote).sort((a, b) => b[1].n - a[1].n)[0];
   const biggest = exp.reduce((a, b) => (!a || b.amount > a.amount ? b : a), null);
   // 天數
-  const start = new Date(from + 'T00:00'), end = new Date(Math.min(new Date(to + 'T00:00'), new Date(new Date().toDateString())));
+  // 從開始記帳那天算起，才不會把還沒用 App 的日子算成「沒花錢」
+  const firstDay = all.reduce((m, x) => (x.date < m ? x.date : m), to);
+  const start = new Date((firstDay > from ? firstDay : from) + 'T00:00'), end = new Date(Math.min(new Date(to + 'T00:00'), new Date(new Date().toDateString())));
   const days = Math.max(1, Math.round((end - start) / 864e5) + 1);
   const spentDays = new Set(exp.map(e => e.date));
   const noSpend = Math.max(0, days - [...spentDays].filter(d => d <= to).length);

@@ -1,5 +1,5 @@
 // 離線快取：App 本體先用快取（秒開），背景再更新；字型與雲端模組也會存起來
-const VERSION = 'v1.3.0';
+const VERSION = 'v1.4.0';
 const APP_CACHE = 'jz-app-' + VERSION;
 const RUNTIME = 'jz-runtime';
 const SHELL = [

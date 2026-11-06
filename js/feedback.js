@@ -170,10 +170,12 @@ export const PHRASES = {
   income: ['入帳囉！辛苦了 💰', '收入 +1，太棒了 🎉', '錢錢進來了 💰', '有進帳，讚啦 🙌'],
   first: '第一筆記帳完成！好的開始是成功的一半 🎉',
 };
-export const pickGeneric = (name = '') => (name && Math.random() < 0.35)
+const ALIEN = ['三隻眼睛都看到了，記好了！ 👀', '嗶嗶～記帳成功 👽', '收到，母艦已經登錄這筆 🛸', '外星小幫手幫你記下來了 ✨', '地球人今天也很棒！🌍'];
+const alienOn = () => document.documentElement.dataset.accent === 'alien';
+export const pickGeneric = (name = '') => alienOn() && Math.random() < 0.6 ? pick(ALIEN) : (name && Math.random() < 0.35)
   ? pick([`做得好，${name}！`, `${name} 好棒，又記一筆！`, `謝謝 ${name}，記好了！`]) + ' ' + pick(PHRASES.emoji)
   : pick(PHRASES.generic) + ' ' + pick(PHRASES.emoji);
-export const pickIncome = () => pick(PHRASES.income);
+export const pickIncome = () => (alienOn() && Math.random() < 0.5 ? '能量補給到帳，三眼怪替你開心 🔋👽' : pick(PHRASES.income));
 export const greeting = (name = '') => {
   const h = new Date().getHours();
   const [w, e] = h < 5 ? ['夜深了', '🌙'] : h < 11 ? ['早安', '☀️'] : h < 14 ? ['午安', '🌤️'] : h < 18 ? ['午後好', '☕'] : ['晚安', '🌙'];
