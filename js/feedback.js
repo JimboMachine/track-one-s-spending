@@ -2,7 +2,32 @@
 
 import { reduceMotion } from './charts.js';
 
-export function haptic(p = 12) { try { navigator.vibrate && navigator.vibrate(p); } catch { /* 不支援就算了 */ } }
+// 震動：Android 用 vibrate；iPhone（Safari 不支援 vibrate）改用 iOS 18 起「開關」元件內建的觸感回饋
+let iosSwitch = null, lastTick = 0;
+function iosTick() {
+  if (!iosSwitch) {
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.cssText = 'position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    const inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+    label.appendChild(inp); document.body.appendChild(label);
+    iosSwitch = label;
+  }
+  const now = Date.now();
+  if (now - lastTick < 60) return;
+  lastTick = now;
+  iosSwitch.click();
+}
+const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+export function haptic(p = 12) {
+  try {
+    if (canVibrate) { navigator.vibrate(p); return; }
+    iosTick();
+    // 有節奏的震動（例如 [18, 50, 18]）在 iPhone 上補第二下
+    if (Array.isArray(p) && p.length >= 3) setTimeout(iosTick, p[0] + p[1]);
+  } catch { /* 不支援就算了 */ }
+}
 
 // ---------- Toast ----------
 // 一次只出現一則，其餘排隊；有「復原／還原」這類按鈕的優先插隊（那是你現在就要按的）

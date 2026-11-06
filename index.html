@@ -50,6 +50,8 @@
           <div class="search-sum" id="search-sum"></div>
           <div id="search-list"></div>
         </div>
+        <div class="seg scope-seg" id="scope-seg" hidden><button type="button" data-scope="me" class="on">我的帳</button><button type="button" data-scope="book">👫 共同帳本</button></div>
+        <div class="card book-hero" id="book-hero" hidden></div>
         <div class="month-nav">
           <button class="icon-btn" id="m-prev" type="button" aria-label="上個月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
           <div class="mn-title" id="m-title"></div>
@@ -81,6 +83,8 @@
           <div class="donut-wrap" id="donut-wrap"></div>
         </div>
 
+        <div class="card" id="acc-stats" hidden></div>
+        <div class="card" id="tag-stats" hidden></div>
         <div class="card">
           <div class="card-head"><h2>每日支出</h2><span class="card-sub" id="daily-sub"></span></div>
           <div id="daily-chart"></div>
@@ -109,8 +113,15 @@
 
         <h2 class="section-label">設定</h2>
         <div class="card">
-          <div class="set-row" style="border:0;padding:0"><div class="t"><b>每月預算</b><small id="budget-row-val">還沒設定</small></div><button class="btn ghost sm" id="budget-row-btn" type="button">設定</button></div>
+          <div class="set-row" style="border:0;padding:0 0 12px"><div class="t"><b>每月預算</b><small id="budget-row-val">還沒設定</small></div><button class="btn ghost sm" id="budget-row-btn" type="button">設定</button></div>
+          <div class="set-row" style="padding-bottom:0"><div class="t"><b>分類預算</b><small id="catbudget-row-val">還沒設定</small></div><button class="btn ghost sm" type="button" data-act="cat-budget">設定</button></div>
         </div>
+        <div class="card" id="book-card"></div>
+        <div class="card" id="recur-card"></div>
+        <div class="card" id="trip-card"></div>
+        <div class="card" id="account-card"></div>
+        <div class="card" id="cat-card"></div>
+        <div class="card" id="remind-card"></div>
         <div class="card" id="cloud-card"></div>
 
         <div class="card">
@@ -140,6 +151,11 @@
             <li><code>今天花多少</code>、<code>本月</code>隨時問我花費</li>
             <li><code>這個月咖啡花多少</code>、<code>上次修車多少</code>查特定項目</li>
             <li><code>復原</code>收回剛剛記的那一筆</li>
+            <li><code>晚餐 320 刷卡 #約會</code>說付款方式、加 # 就是標籤</li>
+            <li><code>拉麵 1200 日圓</code>外幣自動換算台幣；開旅行模式連「日圓」都不用打</li>
+            <li><code>每月 5 號 房租 15000</code>設一次，每個月自動記好</li>
+            <li><code>電影 500 #一起</code>記進共同帳本，月底自動算誰該補多少</li>
+            <li>點 📷 拍收據或選付款截圖，點 🎙️ 用說的記帳</li>
             <li>收據往<b>左滑</b>刪除、往<b>右滑</b>編輯；下方快捷鍵點一下用上次金額直接記，<b>長按</b>可以改金額</li>
           </ul>
           <p class="note" style="margin:10px 0 0">分類記錯了，點那筆改掉就好，下次我會記住。</p>
@@ -150,7 +166,7 @@
           <div class="set-row"><div class="t"><b>範例資料</b><small>先看看圖表長什麼樣子</small></div><button class="btn ghost sm" id="sample-btn" type="button">載入範例</button></div>
           <div class="set-row"><div class="t"><b>清除所有紀錄</b><small>建議先匯出備份</small></div><button class="btn danger sm" id="clear-btn" type="button">清除</button></div>
         </div>
-        <p class="note" style="text-align:center">隨手記帳 · v1.2</p>
+        <p class="note" style="text-align:center">隨手記帳 · v1.3</p>
       </div>
     </section>
   </main>
@@ -159,7 +175,10 @@
     <div class="preview" id="preview" aria-live="polite"></div>
     <div class="chips" id="quick-chips"></div>
     <div class="inputrow">
+      <button class="tool-btn" id="cam-btn" type="button" data-act="cam" aria-label="拍收據或選截圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <input type="file" id="ocr-file" accept="image/*" hidden>
       <input id="msg" type="text" enterkeyhint="send" placeholder="打一句話記帳，例如：午餐 120" aria-label="記帳訊息">
+      <button class="send mic" id="mic-btn" type="button" data-act="mic" aria-label="語音記帳"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
       <button class="send" id="send" type="submit" aria-label="送出" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
     </div>
   </form>
@@ -198,6 +217,7 @@
       </div>
     </div>
     <div class="field"><label for="e-note">備註</label><input class="input" id="e-note" placeholder="例如：午餐"></div>
+    <div class="field" id="e-extra"></div>
     <div class="raw-line" id="e-raw"></div>
     <div class="sheet-actions">
       <button class="btn danger" id="e-del" type="button" aria-label="刪除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>刪除</button>

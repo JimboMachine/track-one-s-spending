@@ -139,7 +139,8 @@ function findCategory(type, note, learned) {
     for (const [k, v] of Object.entries(learned)) if (k.length >= 2 && key.includes(k) && v.type === type) return v.category;
   }
   const all = [];
-  for (const c of CATEGORIES[type]) for (const k of c.kw) all.push([k, c.name]);
+  // 自訂分類的關鍵字優先（一樣長時排前面）
+  for (const c of [...CATEGORIES[type].filter(x => x.custom), ...CATEGORIES[type].filter(x => !x.custom)]) for (const k of c.kw) all.push([k, c.name]);
   all.sort((a, b) => b[0].length - a[0].length);
   for (const [k, name] of all) if (key.includes(k)) return name;
   return null;
@@ -197,4 +198,51 @@ export function parseMessage(text, opts = {}) {
   }
   const r = parseOne(text, opts);
   return r && !r.error ? [r] : [];
+}
+
+// ---------- 自訂分類 ----------
+// 自訂分類插在「其他／其他收入」前面；關鍵字一樣會自動判斷
+export function setCustomCategories(list = []) {
+  for (const type of ['expense', 'income']) {
+    const arr = CATEGORIES[type].filter(c => !c.custom);
+    const fallback = arr.pop(); // 其他 / 其他收入
+    const add = list.filter(c => c.type === type && c.name && !arr.some(x => x.name === c.name))
+      .map(c => ({ name: c.name, icon: c.icon || '🏷️', kw: (c.kw || []).map(k => String(k).toLowerCase()).filter(Boolean), color: c.color, custom: true }));
+    CATEGORIES[type].splice(0, CATEGORIES[type].length, ...arr, ...add, fallback);
+  }
+}
+
+// ---------- 付款方式、標籤、外幣 ----------
+export const ACCOUNT_WORDS = [
+  ['信用卡', ['刷卡', '信用卡', '刷信用卡', '卡刷']], ['現金', ['現金', '付現']], ['LINE Pay', ['line pay', 'linepay']],
+  ['悠遊卡', ['悠遊卡', '悠遊付', '嗶卡']], ['街口', ['街口']], ['Apple Pay', ['apple pay', 'applepay']], ['轉帳', ['轉帳', '匯款']],
+];
+export const CURRENCIES = {
+  TWD: { sym: 'NT$', words: ['新台幣', '台幣', 'twd'] },
+  JPY: { sym: '¥', words: ['日圓', '日元', '日幣', '円', 'jpy', 'yen', '¥', '￥'] },
+  USD: { sym: 'US$', words: ['美金', '美元', 'usd', 'us$'] },
+  KRW: { sym: '₩', words: ['韓元', '韓幣', 'krw', '₩'] },
+  EUR: { sym: '€', words: ['歐元', 'eur', '€'] },
+  THB: { sym: '฿', words: ['泰銖', 'thb', '฿'] },
+  HKD: { sym: 'HK$', words: ['港幣', '港元', 'hkd', 'hk$'] },
+  CNY: { sym: 'CN¥', words: ['人民幣', 'rmb', 'cny'] },
+};
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function extractExtras(text, { accounts = [] } = {}) {
+  let t = ' ' + text + ' ';
+  const tags = [];
+  t = t.replace(/[#＃]([^\s#＃,，、;；]+)/g, (_, g) => { if (!tags.includes(g)) tags.push(g); return ' '; });
+  let account = null;
+  const words = [...accounts.filter(a => !ACCOUNT_WORDS.some(([n]) => n === a)).map(a => [a, [a.toLowerCase()]]), ...ACCOUNT_WORDS]
+    .flatMap(([name, ws]) => ws.map(w => [name, w])).sort((a, b) => b[1].length - a[1].length);
+  for (const [name, w] of words) {
+    const re = new RegExp(`(^|[\\s，,、用])${escRe(w)}(?=$|[\\s，,、付])`, 'i');
+    if (re.test(t)) { account = name; t = t.replace(re, '$1 ').replace(/\s用\s/g, ' '); break; }
+  }
+  let currency = null;
+  for (const [code, c] of Object.entries(CURRENCIES)) {
+    const re = new RegExp(c.words.map(escRe).join('|'), 'i');
+    if (re.test(t)) { currency = code; t = t.replace(new RegExp(c.words.map(escRe).join('|'), 'gi'), ' '); break; }
+  }
+  return { text: t.replace(/\s+/g, ' ').trim(), tags, account, currency };
 }
