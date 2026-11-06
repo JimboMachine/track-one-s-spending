@@ -733,7 +733,7 @@ function renderCloud(cfg) {
 
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; renderInstall(); });
-window.addEventListener('appinstalled', () => { deferredInstall = null; toast('安裝完成！之後從主畫面打開就好 🎉', { icon: '📲' }); confetti({ count: 100 }); renderInstall(); });
+window.addEventListener('appinstalled', () => { deferredInstall = null; toast('安裝完成！之後從主畫面打開就好 🎉', { icon: '📲' }); setTimeout(() => confetti({ count: 100 }), 1000); renderInstall(); });
 function renderInstall() {
   const card = $('#install-card');
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
