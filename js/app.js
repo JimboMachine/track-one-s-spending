@@ -1190,12 +1190,15 @@ function readPhoto(file) {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const size = 256, c = document.createElement('canvas');
+      // 512×512 在高解析螢幕上也清楚；她的頁面頭像欄位上限 200000 字，所以畫質會自動往下調到放得進去
+      const size = 512, c = document.createElement('canvas');
       c.width = c.height = size;
       const m = Math.min(img.naturalWidth, img.naturalHeight);
       c.getContext('2d').drawImage(img, (img.naturalWidth - m) / 2, (img.naturalHeight - m) / 2, m, m, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      res(c.toDataURL('image/jpeg', 0.85));
+      let q = 0.9, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 190000 && q > 0.5) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }
+      res(out);
     };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('讀不到這張圖片，換一張試試')); };
     img.src = url;
