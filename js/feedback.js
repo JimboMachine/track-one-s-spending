@@ -49,9 +49,15 @@ export function confetti({ count = 90, colors, origin, hearts = false } = {}) {
     });
   }
   if (raf) return;
+  // 每一格都對齊目前的視窗：視窗大小或螢幕倍率變了就重設畫布（重設也會清空），再清空整張畫布
+  const fit = () => {
+    const d = Math.min(2, window.devicePixelRatio || 1), w = Math.round(innerWidth * d), h = Math.round(innerHeight * d);
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  };
   const tick = () => {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    fit();
     parts = parts.filter(p => p.life < 150 && p.y < innerHeight + 30);
     for (const p of parts) {
       p.life++; p.vy += 0.28; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
@@ -69,7 +75,7 @@ export function confetti({ count = 90, colors, origin, hearts = false } = {}) {
       ctx.restore();
     }
     if (parts.length) raf = requestAnimationFrame(tick);
-    else { raf = null; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+    else { raf = null; cv.width = cv.height = 0; }
   };
   raf = requestAnimationFrame(tick);
 }

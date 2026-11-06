@@ -651,9 +651,15 @@ svg.h { fill: currentColor; display: block; }
       parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: 6 + Math.random() * 8, c: colors[i % colors.length], r: (Math.random() - 0.5) * 0.7, life: 0 });
     }
     if (raf) return;
+    // 每一格都對齊目前的視窗：視窗大小或螢幕倍率變了就重設畫布（重設也會清空），再清空整張畫布
+    const fit = () => {
+      const d = Math.min(2, window.devicePixelRatio || 1), w = Math.round(innerWidth * d), h = Math.round(innerHeight * d);
+      if (fx.width !== w || fx.height !== h) { fx.width = w; fx.height = h; }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, fx.width, fx.height);
+      ctx.setTransform(d, 0, 0, d, 0, 0);
+    };
     const tick = () => {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      fit();
       parts = parts.filter(p => p.life < 120 && p.y < innerHeight + 30);
       for (const p of parts) {
         p.life++; p.vy += 0.22; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy;
@@ -666,7 +672,7 @@ svg.h { fill: currentColor; display: block; }
         ctx.fill(); ctx.restore();
       }
       if (parts.length) raf = requestAnimationFrame(tick);
-      else { raf = 0; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+      else { raf = 0; fx.width = fx.height = 0; }
     };
     raf = requestAnimationFrame(tick);
   }
