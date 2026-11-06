@@ -241,6 +241,22 @@ svg.h { fill: currentColor; display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
 }
+.anniv { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 6px; margin: -6px 0 18px; padding: 12px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 14px; text-align: center; }
+.anniv b { font-size: 26px; color: var(--love-strong); font-variant-numeric: tabular-nums; line-height: 1; }
+.anniv small { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.reply-wrap { margin-top: 12px; }
+.reply-wrap.sm { margin: 4px 0 8px; }
+.reply-btn { width: 100%; height: 44px; border-radius: 14px; border: 1px dashed var(--love); color: var(--love-strong); font-size: 14px; font-weight: 600; background: transparent; }
+.reply-btn:active { background: var(--surface); }
+.reply-done { display: block; width: 100%; text-align: left; padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.reply-done span { color: var(--love-strong); font-weight: 600; margin-right: 2px; }
+.reply-done small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.reply-form { display: flex; flex-direction: column; gap: 8px; }
+.reply-form textarea { width: 100%; min-height: 84px; resize: vertical; padding: 10px 12px; border-radius: 14px; border: 1.5px solid var(--love); background: var(--paper); color: var(--ink); font: inherit; font-size: 16px; line-height: 1.6; outline: none; }
+.reply-act { display: flex; justify-content: flex-end; gap: 8px; }
+.reply-act .btn { margin-top: 0; height: 40px; padding: 0 18px; font-size: 14px; }
+.btn-ghost { height: 40px; padding: 0 14px; border-radius: 14px; color: var(--muted); font-size: 14px; }
+.reply-link { font-size: 12px; color: var(--love-strong); padding: 0 4px 8px; height: 28px; }
 </style>
 </head>
 <body>
@@ -280,7 +296,7 @@ svg.h { fill: currentColor; display: block; }
   const state = {
     feed: null, net: false, fetchedAt: 0, loading: false, offline: false,
     showN: 10, expanded: new Set(), fresh: new Set(), opened: new Set(store.get(K.opened, [])),
-    reveal: null, envBusy: false, entered: false,
+    reveal: null, envBusy: false, entered: false, replying: null,
   };
 
   // ---------- 日期 ----------
@@ -339,9 +355,10 @@ svg.h { fill: currentColor; display: block; }
     if (!d || typeof d !== 'object') return null;
     const notes = (Array.isArray(d.notes) ? d.notes : [])
       .filter(n => n && n.id && typeof n.body === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(n.date))
-      .map(n => ({ id: String(n.id), date: n.date, body: n.body, created_at: String(n.created_at || ''), seen: !!n.seen, hearts: Math.max(0, Number(n.hearts) | 0) }));
+      .map(n => ({ id: String(n.id), date: n.date, body: n.body, created_at: String(n.created_at || ''), seen: !!n.seen, hearts: Math.max(0, Number(n.hearts) | 0), reply: typeof n.reply === 'string' ? n.reply : '' }));
     notes.sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
-    return { name: typeof d.name === 'string' ? d.name.trim().slice(0, 40) : '', avatar: typeof d.avatar === 'string' ? d.avatar : '', notes };
+    const anniv = typeof d.anniv === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.anniv) ? d.anniv : null;
+    return { name: typeof d.name === 'string' ? d.name.trim().slice(0, 40) : '', avatar: typeof d.avatar === 'string' ? d.avatar : '', anniv, annivLabel: typeof d.anniv_label === 'string' ? d.anniv_label.slice(0, 10) : '', notes };
   }
   const saveFeed = () => { if (state.feed) store.set(K.feed, state.feed); };
   const findNote = id => state.feed && state.feed.notes.find(n => n.id === id);
@@ -484,7 +501,29 @@ svg.h { fill: currentColor; display: block; }
     if (f.notes.length) bits.push(`寫了 ${f.notes.length} 則`);
     if (st >= 2) bits.push(`連續 ${st} 天 💗`);
     return `<header class="hero"><div class="avatar" aria-hidden="true">${avatarHTML(f)}</div>
-      <div class="who"><h1>${f.name ? `${esc(nameLead())}寫給你的` : '寫給你的話'}</h1><p>${bits.join(' · ')}</p></div></header>`;
+      <div class="who"><h1>${f.name ? `${esc(nameLead())}寫給你的` : '寫給你的話'}</h1><p>${bits.join(' · ')}</p></div></header>${annivHTML(f)}`;
+  }
+
+  function annivHTML(f) {
+    if (!f.anniv) return '';
+    const [y, m, d] = f.anniv.split('-').map(Number);
+    const start = new Date(y, m - 1, d), now = new Date(); now.setHours(0, 0, 0, 0);
+    const days = Math.round((now - start) / 864e5) + 1;
+    if (days < 1) return '';
+    let next = new Date(now.getFullYear(), m - 1, d);
+    if (next < now) next = new Date(now.getFullYear() + 1, m - 1, d);
+    const toNext = Math.round((next - now) / 864e5), years = next.getFullYear() - y;
+    const hundred = Math.ceil((days + 1) / 100) * 100;
+    const sub = toNext === 0 ? `今天是 ${years} 週年，週年快樂 🎉` : hundred - days < toNext ? `再 ${hundred - days} 天就第 ${hundred} 天` : `距離 ${years} 週年還有 ${toNext} 天`;
+    return `<div class="anniv"><span>💞 ${esc(f.annivLabel || '在一起')}的第</span><b>${days}</b><span>天</span><small>${sub}</small></div>`;
+  }
+
+  function replyHTML(n) {
+    if (owner) return n.reply ? `<div class="reply-done"><span>💬 她回：</span>${esc(n.reply)}</div>` : '';
+    if (state.replying === n.id) return `<form class="reply-form" data-reply-form="${esc(n.id)}"><textarea maxlength="500" placeholder="回${esc(nameIn())}一句話…" aria-label="回覆">${esc(n.reply || '')}</textarea>
+      <div class="reply-act"><button type="button" class="btn-ghost" data-reply-cancel>取消</button><button type="submit" class="btn">送出 💌</button></div></form>`;
+    if (n.reply) return `<button class="reply-done" type="button" data-reply="${esc(n.id)}"><span>💬 你回了：</span>${esc(n.reply)}<small>點一下修改</small></button>`;
+    return `<button class="reply-btn" type="button" data-reply="${esc(n.id)}">💬 回${esc(nameIn())}一句話</button>`;
   }
 
   function envelopeHTML(f) {
@@ -508,7 +547,8 @@ svg.h { fill: currentColor; display: block; }
         <button class="heart-big" type="button" data-heart="${esc(n.id)}" aria-label="送一顆愛心">${HEART}</button>
         <div class="heart-info"><b data-count="${esc(n.id)}" data-kind="big">${heartLabel(n.hearts)}</b>
           <span class="heart-sub">${n.hearts ? `你送的每顆心，${esc(nameLead())}都收得到` : `點愛心，讓${esc(nameIn())}知道你看到了`}</span></div>
-      </div>`;
+      </div>
+      <div class="reply-wrap">${replyHTML(n)}</div>`;
   }
 
   function hintHTML() {
@@ -531,6 +571,7 @@ svg.h { fill: currentColor; display: block; }
           <button class="n-body" type="button" data-expand="${esc(n.id)}" aria-expanded="${open}"><span class="n-text">${esc(n.body)}</span></button>
           <div class="n-foot"><span class="n-more">${open ? '收起' : '展開全文'}</span>
             <button class="heart-sm" type="button" data-heart="${esc(n.id)}" aria-label="送一顆愛心">${HEART}<span data-count="${esc(n.id)}">${n.hearts || ''}</span></button></div>
+          ${n.reply || state.replying === n.id ? `<div class="reply-wrap sm">${replyHTML(n)}</div>` : (owner ? '' : `<button class="reply-link" type="button" data-reply="${esc(n.id)}">回一句</button>`)}
         </li>`;
       }).join('')}</ul>
       ${list.length > shown.length ? `<button class="more" type="button" data-more>看更多（還有 ${list.length - shown.length} 則）</button>` : ''}
@@ -690,8 +731,10 @@ svg.h { fill: currentColor; display: block; }
 
   // ---------- 操作 ----------
   document.addEventListener('click', e => {
-    const t = e.target.closest('#env,[data-heart],[data-expand],[data-more],[data-refresh],[data-retry],[data-hint-off]');
+    const t = e.target.closest('#env,[data-heart],[data-expand],[data-more],[data-refresh],[data-retry],[data-hint-off],[data-reply],[data-reply-cancel]');
     if (!t) return;
+    if (t.dataset.reply) { if (owner) { toast('預覽模式不能回覆', '👀'); return; } state.replying = t.dataset.reply; render(); const ta = $(`[data-reply-form="${t.dataset.reply}"] textarea`); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } return; }
+    if (t.hasAttribute('data-reply-cancel')) { state.replying = null; render(); return; }
     if (t.id === 'env') openEnvelope();
     else if (t.dataset.heart) tapHeart(t.dataset.heart, t);
     else if (t.dataset.expand) {
@@ -710,6 +753,25 @@ svg.h { fill: currentColor; display: block; }
       const h = t.closest('.hint');
       h.classList.add('out');
       setTimeout(() => h.remove(), 260);
+    }
+  });
+
+  document.addEventListener('submit', async e => {
+    const f = e.target.closest('[data-reply-form]'); if (!f) return;
+    e.preventDefault();
+    const id = f.dataset.replyForm, body = $('textarea', f).value.trim();
+    if (!body) { $('textarea', f).focus(); return; }
+    const btn = $('button[type=submit]', f); btn.disabled = true; btn.textContent = '送出中…';
+    try {
+      const ok = await rpc('love_reply', { p_token: token, p_note: id, p_body: body });
+      if (ok === false) throw new Error('fail');
+      const n = findNote(id); if (n) n.reply = body;
+      state.replying = null; saveFeed(); render();
+      haptic([12, 40, 12]);
+      toast(`送出了，${nameLead()}會收到 💌`, '💬');
+    } catch (err) {
+      btn.disabled = false; btn.textContent = '送出 💌';
+      toast(errKind(err) === 'setup' ? '回覆功能還在準備中，請對方更新一下設定' : '沒送出去，檢查一下網路再試一次', '📶');
     }
   });
 

@@ -41,6 +41,17 @@
 
     <section class="view" id="view-stats" aria-label="圖表">
       <div class="view-inner">
+        <div class="search-bar" role="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="q" type="search" enterkeyhint="search" placeholder="搜尋全部紀錄：咖啡、交通、>500" aria-label="搜尋紀錄" autocomplete="off">
+          <button class="q-clear" id="q-clear" type="button" aria-label="清除搜尋" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
+        </div>
+        <div class="card search-card" id="search-card" hidden>
+          <div class="search-sum" id="search-sum"></div>
+          <div id="search-list"></div>
+        </div>
+        <div class="seg scope-seg" id="scope-seg" hidden><button type="button" data-scope="me" class="on">我的帳</button><button type="button" data-scope="book">👫 共同帳本</button></div>
+        <div class="card book-hero" id="book-hero" hidden></div>
         <div class="month-nav">
           <button class="icon-btn" id="m-prev" type="button" aria-label="上個月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
           <div class="mn-title" id="m-title"></div>
@@ -72,6 +83,8 @@
           <div class="donut-wrap" id="donut-wrap"></div>
         </div>
 
+        <div class="card" id="acc-stats" hidden></div>
+        <div class="card" id="tag-stats" hidden></div>
         <div class="card">
           <div class="card-head"><h2>每日支出</h2><span class="card-sub" id="daily-sub"></span></div>
           <div id="daily-chart"></div>
@@ -100,16 +113,15 @@
 
         <h2 class="section-label">設定</h2>
         <div class="card">
-          <div class="card-head"><h2>每月預算</h2></div>
-          <div class="field">
-            <div class="row">
-              <div class="money-input grow" style="padding:0 14px"><span style="font-size:20px">$</span><input id="budget-input" inputmode="numeric" placeholder="例如 15000" style="height:48px;font-size:24px" aria-label="每月預算"></div>
-              <button class="btn primary" id="budget-save" type="button">儲存</button>
-            </div>
-            <p class="note" style="margin:0">設定後，每次記帳都會告訴你本月還能花多少。</p>
-          </div>
+          <div class="set-row" style="border:0;padding:0 0 12px"><div class="t"><b>每月預算</b><small id="budget-row-val">還沒設定</small></div><button class="btn ghost sm" id="budget-row-btn" type="button">設定</button></div>
+          <div class="set-row" style="padding-bottom:0"><div class="t"><b>分類預算</b><small id="catbudget-row-val">還沒設定</small></div><button class="btn ghost sm" type="button" data-act="cat-budget">設定</button></div>
         </div>
-
+        <div class="card" id="book-card"></div>
+        <div class="card" id="recur-card"></div>
+        <div class="card" id="trip-card"></div>
+        <div class="card" id="account-card"></div>
+        <div class="card" id="cat-card"></div>
+        <div class="card" id="remind-card"></div>
         <div class="card" id="cloud-card"></div>
 
         <div class="card">
@@ -137,7 +149,14 @@
             <li><code>早餐 60、咖啡 85</code>一次記好幾筆</li>
             <li><code>房租 1.5萬</code>支援「萬」「千」和「一百二十元」</li>
             <li><code>今天花多少</code>、<code>本月</code>隨時問我花費</li>
+            <li><code>這個月咖啡花多少</code>、<code>上次修車多少</code>查特定項目</li>
             <li><code>復原</code>收回剛剛記的那一筆</li>
+            <li><code>晚餐 320 刷卡 #約會</code>說付款方式、加 # 就是標籤</li>
+            <li><code>拉麵 1200 日圓</code>外幣自動換算台幣；開旅行模式連「日圓」都不用打</li>
+            <li><code>每月 5 號 房租 15000</code>設一次，每個月自動記好</li>
+            <li><code>電影 500 #一起</code>記進共同帳本，月底自動算誰該補多少</li>
+            <li>點 📷 拍收據或選付款截圖，點 🎙️ 用說的記帳</li>
+            <li>收據往<b>左滑</b>刪除、往<b>右滑</b>編輯；下方快捷鍵點一下用上次金額直接記，<b>長按</b>可以改金額</li>
           </ul>
           <p class="note" style="margin:10px 0 0">分類記錯了，點那筆改掉就好，下次我會記住。</p>
         </div>
@@ -147,7 +166,7 @@
           <div class="set-row"><div class="t"><b>範例資料</b><small>先看看圖表長什麼樣子</small></div><button class="btn ghost sm" id="sample-btn" type="button">載入範例</button></div>
           <div class="set-row"><div class="t"><b>清除所有紀錄</b><small>建議先匯出備份</small></div><button class="btn danger sm" id="clear-btn" type="button">清除</button></div>
         </div>
-        <p class="note" style="text-align:center">隨手記帳 · v1.1</p>
+        <p class="note" style="text-align:center">隨手記帳 · v1.3</p>
       </div>
     </section>
   </main>
@@ -156,7 +175,10 @@
     <div class="preview" id="preview" aria-live="polite"></div>
     <div class="chips" id="quick-chips"></div>
     <div class="inputrow">
+      <button class="tool-btn" id="cam-btn" type="button" data-act="cam" aria-label="拍收據或選截圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <input type="file" id="ocr-file" accept="image/*" hidden>
       <input id="msg" type="text" enterkeyhint="send" placeholder="打一句話記帳，例如：午餐 120" aria-label="記帳訊息">
+      <button class="send mic" id="mic-btn" type="button" data-act="mic" aria-label="語音記帳"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
       <button class="send" id="send" type="submit" aria-label="送出" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
     </div>
   </form>
@@ -178,7 +200,13 @@
   </div>
   <form class="sheet-body" id="edit-form">
     <div class="seg" id="e-type"><button type="button" data-t="expense">支出</button><button type="button" data-t="income">收入</button></div>
-    <div class="money-input"><span>$</span><input id="e-amount" inputmode="decimal" aria-label="金額" required></div>
+    <div class="money-input" id="e-money"><span>$</span><input id="e-amount" inputmode="none" autocomplete="off" aria-label="金額（可以輸入 120+85 這種算式）" required><span class="calc-res" id="e-calc" aria-live="polite"></span></div>
+    <div class="keypad" id="keypad" hidden>
+      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="back" class="k-fn" aria-label="刪除一位"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h11v14H9l-6-7z"/><path d="m12 9 5 6M17 9l-5 6"/></svg></button>
+      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="+" class="k-fn" aria-label="加">+</button>
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="−" class="k-fn" aria-label="減">−</button>
+      <button type="button" data-k="00">00</button><button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" data-k="done" class="k-done">完成</button>
+    </div>
     <div class="field"><span class="lbl">分類</span><div class="cat-grid" id="e-cats"></div></div>
     <div class="field">
       <label for="e-date">日期</label>
@@ -189,6 +217,7 @@
       </div>
     </div>
     <div class="field"><label for="e-note">備註</label><input class="input" id="e-note" placeholder="例如：午餐"></div>
+    <div class="field" id="e-extra"></div>
     <div class="raw-line" id="e-raw"></div>
     <div class="sheet-actions">
       <button class="btn danger" id="e-del" type="button" aria-label="刪除"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>刪除</button>

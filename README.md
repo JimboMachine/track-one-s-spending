@@ -14,6 +14,15 @@
 - **「我的」個人頁面**：頭像（emoji 或照片）、暱稱、一句話簽名、6 種主題色、淺色／深色、封面圖案、存錢目標進度條、12 個成就徽章、記帳統計
 - **每日情話**：每天寫一句話給她，她用專屬連結就能看到（不用下載、不用登入，看不到你的帳）；她看過會顯示「她看過了 ✓」，她按愛心你會收到通知
 - **正回饋**：收據蓋章動畫、鼓勵訊息、連續記帳天數、里程碑彩帶、徽章解鎖、比平常省錢提醒、無支出日統計
+- **固定收支**：`每月 5 號 房租 15000`，每月自動記好，扣款前一天提醒
+- **付款方式與標籤**：`晚餐 320 刷卡 #約會`，圖表頁看各付款方式和標籤花了多少
+- **外幣與旅行模式**：`拉麵 1200 日圓` 自動換算台幣；開旅行模式後每筆自動加標籤、外幣不用打單位
+- **分類預算**：每個分類各自設上限，80% 提醒、超出標紅
+- **自訂分類**：加自己的分類和關鍵字，例如 🐱 貓咪
+- **語音、拍收據、付款截圖記帳**：🎙️ 用說的；📷 拍收據或選 LINE Pay／刷卡通知截圖自動讀出金額（Android 還能從相簿直接「分享」給 App）
+- **共同帳本**：和她一起記約會、房租這種共同支出，月底自動算誰該補多少；各自的私帳照樣分開
+- **月報與年報**：一張可以存成圖片的回顧卡
+- **每日提醒（選用）**：設定時間，那天還沒記帳才推播提醒
 - **深色模式**、離線可用、CSV 匯出／匯入（Excel、Google 試算表都能開）
 - **雲端同步（選用）**：Supabase，手機和電腦看同一份帳、同一個個人頁面和情話
 
@@ -29,6 +38,9 @@
 | `js/charts.js` | 圖表（純 SVG，不需外部套件） |
 | `js/feedback.js` | 動畫、震動、鼓勵訊息 |
 | `js/app.js` | 畫面與互動 |
+| `js/ocr.js` | 收據／截圖文字辨識（用到才下載 Tesseract） |
+| `js/recap.js` | 月報、年報圖片 |
+| `supabase/functions/daily-remind/` | 每日提醒推播（選用） |
 | `sw.js`、`manifest.webmanifest`、`icons/` | PWA（離線、加到主畫面、圖示） |
 | `config.js` | 雲端同步設定（選填） |
 | `supabase.sql` | Supabase 資料表與權限 |
@@ -118,3 +130,31 @@ App →「我的」→「匯出 CSV」。建議每個月匯出一次。CSV 可�
 ### 從 v1.0 升級到 v1.1
 
 如果你之前已經執行過 `supabase.sql`，請到 Supabase 的 SQL Editor **再執行一次最新的 `supabase.sql`**（可以重複執行，不會清掉原本的帳）。這樣個人頁面、情話才能同步，她的專屬連結也才能用。
+
+### 升級到 v1.3
+
+1. 到 Supabase 的 SQL Editor **再執行一次最新的 `supabase.sql`**（可以重複執行，不會清掉原本的帳）。共同帳本、她回你的話、付款方式和標籤的雲端同步都靠這一步。沒執行之前 App 照樣能用，只是這些新欄位只存在這台裝置上。
+2. 共同帳本：兩個人都要開雲端同步並登入。你在「我的 → 共同帳本」建立，把 6 碼邀請碼傳給她，她在同一個地方輸入就加入了。
+
+### 每日提醒（選用）
+
+需要在 Supabase 部署一個小函式，做一次就好：
+
+1. 產生推播金鑰：電腦上執行 `npx web-push generate-vapid-keys`。
+2. 把 **Public Key** 貼到 `config.js` 的 `vapidPublicKey`。
+3. 設定密鑰（`CRON_SECRET` 自己隨便打一串）：
+   ```
+   supabase secrets set VAPID_PUBLIC_KEY=… VAPID_PRIVATE_KEY=… VAPID_SUBJECT=mailto:你的信箱 CRON_SECRET=…
+   ```
+4. 部署：`supabase functions deploy daily-remind --no-verify-jwt`
+5. 在 SQL Editor 開啟 `pg_cron`、`pg_net` 擴充功能，再排程每 15 分鐘呼叫一次：
+   ```sql
+   select cron.schedule('daily-remind', '*/15 * * * *', $$
+     select net.http_post(
+       url := 'https://你的專案.supabase.co/functions/v1/daily-remind',
+       headers := jsonb_build_object('Authorization', 'Bearer 你的CRON_SECRET')
+     );
+   $$);
+   ```
+
+iPhone 要先把 App 加到主畫面（iOS 16.4 以上），才收得到推播。

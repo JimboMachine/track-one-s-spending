@@ -17,18 +17,28 @@ const emit = () => listeners.forEach(fn => fn());
 
 let entries = load(K.entries, []);
 let deleted = load(K.deleted, []);
-const persist = () => { save(K.entries, entries); save(K.deleted, deleted); emit(); scheduleSync(); };
+const persist = () => { ownCache = null; save(K.entries, entries); save(K.deleted, deleted); emit(); scheduleSync(); };
 
-export const getEntries = () => entries;
+// 自己的帳（包含自己記在共同帳本的）；對方記在共同帳本的另外用 getBookEntries 拿
+let ownCache = null, ownSrc = null;
+export const getEntries = () => { if (ownSrc !== entries || ownCache === null) { ownSrc = entries; ownCache = entries.filter(e => e.mine !== false); } return ownCache; };
+export const getAllEntries = () => entries;
+export const getBookEntries = () => { const b = getBook(); return b ? entries.filter(e => e.bookId === b.id) : []; };
 export const getEntry = id => entries.find(e => e.id === id);
 
+// 額外欄位：付款方式、標籤、外幣原額、固定收支來源、共同帳本
+const EXTRA_FIELDS = ['account', 'tags', 'fx', 'recurringId', 'bookId', 'paidBy'];
 export function addEntries(list, raw) {
   const now = new Date().toISOString();
   const msgId = uuid();
-  const added = list.map(p => ({
-    id: uuid(), type: p.type, amount: p.amount, category: p.category, date: p.date,
-    note: p.note || '', raw: raw || '', msgId, createdAt: now, updatedAt: now, _dirty: true,
-  }));
+  const added = list.map(p => {
+    const e = {
+      id: uuid(), type: p.type, amount: p.amount, category: p.category, date: p.date,
+      note: p.note || '', raw: raw || '', msgId, createdAt: now, updatedAt: now, _dirty: true,
+    };
+    for (const k of EXTRA_FIELDS) if (p[k] != null && !(Array.isArray(p[k]) && !p[k].length)) e[k] = p[k];
+    return e;
+  });
   entries.push(...added);
   persist();
   return added;
@@ -84,7 +94,8 @@ export function learn(note, type, category) {
 }
 
 // ---------- 設定（預算、個人資料、徽章會一起同步到雲端） ----------
-const PREF_KEYS = ['budget', 'profile', 'badges', 'badgeAt'];
+const PREF_KEYS = ['budget', 'profile', 'badges', 'badgeAt', 'recurring', 'catBudgets', 'customCats', 'accounts', 'defaultAccount', 'trip', 'fxRates', 'anniv', 'remind'];
+const SYNC_EXTRA = PREF_KEYS.slice(4);
 function markPrefs() { save(K.prefsMeta, { dirty: true, updatedAt: new Date().toISOString() }); scheduleSync(); }
 export const getSettings = () => ({ budget: 0, ...load(K.settings, {}) });
 export const setSettings = patch => {
@@ -96,12 +107,13 @@ export const getProfile = () => ({ name: '', bio: '', avatar: null, accent: 'jad
 export const setProfile = patch => setSettings({ profile: { ...getProfile(), ...patch } });
 function collectPrefs() {
   const s = getSettings();
-  return { budget: s.budget || 0, profile: s.profile || {}, badges: s.badges || [], badgeAt: s.badgeAt || {}, learned: getLearned() };
+  return { budget: s.budget || 0, profile: s.profile || {}, badges: s.badges || [], badgeAt: s.badgeAt || {}, learned: getLearned(), ...Object.fromEntries(SYNC_EXTRA.filter(k => s[k] !== undefined).map(k => [k, s[k]])) };
 }
 function applyPrefs(d, at) {
   const s = getSettings();
   const badges = [...new Set([...(s.badges || []), ...(d.badges || [])])];
-  save(K.settings, { ...s, budget: d.budget ?? s.budget, profile: d.profile || s.profile, badges, badgeAt: { ...(d.badgeAt || {}), ...(s.badgeAt || {}) } });
+  const extra = Object.fromEntries(SYNC_EXTRA.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+  save(K.settings, { ...s, ...extra, budget: d.budget ?? s.budget, profile: d.profile || s.profile, badges, badgeAt: { ...(d.badgeAt || {}), ...(s.badgeAt || {}) } });
   save(K.learned, { ...getLearned(), ...(d.learned || {}) });
   save(K.prefsMeta, { dirty: false, updatedAt: at });
 }
@@ -138,7 +150,10 @@ const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(18)),
 function shareSnapshot() {
   const p = getProfile();
   const av = p.avatar ? (p.avatar.kind === 'photo' ? p.avatar.value : p.avatar.value) : '';
-  return { name: p.name || '', avatar: av || '', accent: p.accent || 'jade' };
+  const a = getSettings().anniv;
+  const snap = { name: p.name || '', avatar: av || '', accent: p.accent || 'jade' };
+  if (!legacyLove) { snap.anniv = a && a.date ? a.date : null; snap.anniv_label = a && a.label ? a.label : ''; }
+  return snap;
 }
 export async function enableShare(reset = false) {
   if (!cloud.client || !cloud.user) throw new Error('請先開啟雲端同步並登入');
@@ -162,8 +177,70 @@ export function shareLink(token) {
   const usesFileConfig = DEFAULT_CLOUD && cfg && cfg.url === DEFAULT_CLOUD.url;
   return usesFileConfig ? `${base}?t=${token}` : `${base}?t=${token}&u=${encodeURIComponent(cfg.url)}&k=${encodeURIComponent(cfg.key)}`;
 }
-// 她看過、回了愛心時通知畫面
-export const loveNews = { hearts: 0, seen: 0 };
+// ---------- 共同帳本（兩個人各自登入，共用同一本） ----------
+export const getBook = () => load('jz_book', null);
+const setBook = b => { if (b) save('jz_book', b); else localStorage.removeItem('jz_book'); ownCache = null; emit(); };
+const bookErr = e => new Error(/books|book_|function .*(create_book|join_book)/i.test(e?.message || '') ? '共同帳本要先在 Supabase 重新執行最新的 supabase.sql' : (e?.message || String(e)));
+function myCard() { const p = getProfile(); return { name: p.name || (cloud.user?.email || '').split('@')[0] || '我', avatar: p.avatar && p.avatar.kind === 'emoji' ? p.avatar.value : '' }; }
+export async function createBook(name) {
+  if (!cloud.client || !cloud.user) throw new Error('共同帳本要先開啟雲端同步並登入');
+  const me = myCard();
+  const { data, error } = await cloud.client.rpc('create_book', { p_name: name || '我們的帳本', p_member_name: me.name, p_member_avatar: me.avatar });
+  if (error) throw bookErr(error);
+  await refreshBook(data);
+  return getBook();
+}
+export async function joinBook(code) {
+  if (!cloud.client || !cloud.user) throw new Error('共同帳本要先開啟雲端同步並登入');
+  const me = myCard();
+  const { data, error } = await cloud.client.rpc('join_book', { p_code: code.trim().toUpperCase(), p_member_name: me.name, p_member_avatar: me.avatar });
+  if (error) throw bookErr(error);
+  if (!data) throw new Error('找不到這個邀請碼，請再確認一次');
+  await refreshBook(data);
+  sync();
+  return getBook();
+}
+export async function leaveBook() {
+  const b = getBook(); if (!b) return;
+  if (cloud.client && cloud.user) {
+    const { error } = await cloud.client.from('book_members').delete().eq('book_id', b.id).eq('user_id', cloud.user.id);
+    if (error) throw bookErr(error);
+  }
+  // 自己記在共同帳本的留著變回個人帳；對方的從這台裝置移除
+  entries = entries.filter(e => e.mine !== false);
+  entries.forEach(e => { if (e.bookId === b.id) { delete e.bookId; e._dirty = true; } });
+  persist(); setBook(null);
+}
+async function refreshBook(id) {
+  const db = cloud.client;
+  const bid = id || getBook()?.id;
+  if (!bid) {
+    const { data: mem } = await db.from('book_members').select('book_id').eq('user_id', cloud.user.id).limit(1);
+    if (!mem || !mem.length) { if (getBook()) setBook(null); return; }
+    return refreshBook(mem[0].book_id);
+  }
+  const { data: b, error } = await db.from('books').select('id, name, invite_code, created_by').eq('id', bid).maybeSingle();
+  if (error) throw bookErr(error);
+  if (!b) { setBook(null); return; }
+  const { data: ms } = await db.from('book_members').select('user_id, name, avatar').eq('book_id', bid);
+  setBook({ id: b.id, name: b.name, code: b.invite_code, owner: b.created_by, members: (ms || []).map(m => ({ id: m.user_id, name: m.name || '對方', avatar: m.avatar || '', me: m.user_id === cloud.user.id })) });
+}
+export const myId = () => cloud.user?.id || 'local';
+
+// ---------- 推播訂閱 ----------
+export async function savePush(sub, time, tz) {
+  if (!cloud.client || !cloud.user) throw new Error('要先開啟雲端同步並登入');
+  const { error } = await cloud.client.from('push_subs').upsert({ endpoint: sub.endpoint, user_id: cloud.user.id, sub, remind_at: time, tz }, { onConflict: 'endpoint' });
+  if (error) throw new Error(/push_subs/.test(error.message) ? '提醒要先在 Supabase 重新執行最新的 supabase.sql' : error.message);
+}
+export async function removePush(endpoint) {
+  if (!cloud.client || !cloud.user) return;
+  await cloud.client.from('push_subs').delete().eq('endpoint', endpoint);
+}
+
+// 她看過、回了愛心、回了話時通知畫面
+export const loveNews = { hearts: 0, seen: 0, replies: 0 };
+let legacyLove = false; // love_shares 還沒有 anniv 欄位
 
 // ---------- CSV ----------
 const CSV_HEAD = ['日期', '類型', '分類', '金額', '備註', '原始訊息', 'id'];
@@ -228,8 +305,23 @@ const DEFAULT_CLOUD = (window.JZ_CONFIG && window.JZ_CONFIG.supabaseUrl) ? { url
 export const getCloudConfig = () => load(K.cloud, null) || DEFAULT_CLOUD;
 export const setCloudConfig = cfg => { if (cfg) save(K.cloud, cfg); else localStorage.removeItem(K.cloud); };
 
-export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null, extraError: null };
-const setStatus = (s, err = null) => { cloud.status = s; cloud.error = err; emit(); };
+export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null, errorKind: null, extraError: null, retryAt: null };
+// errorKind：network（網路問題，會自動重試）、auth（登入過期，要重新登入）、setup（資料表沒建）、other
+const setStatus = (s, err = null, kind = null) => { cloud.status = s; cloud.error = err; cloud.errorKind = err ? (kind || 'other') : null; if (s !== 'error') { retryN = 0; cloud.retryAt = null; } emit(); };
+// 依 supabase-js 實際的錯誤格式判斷：
+//  網路：fetch 丟出的 TypeError（Chrome「Failed to fetch」、Safari「Load failed」、Firefox「NetworkError…」）或 5xx
+//  登入：PostgREST 的 PGRST301／PGRST302／PGRST303（JWT 過期或無效）、Auth 的 401、refresh token 失效
+const errText = e => `${e?.message || ''} ${e?.code || ''} ${e?.status || ''} ${e?.name || ''}`;
+const isNetErr = e => !navigator.onLine || e instanceof TypeError || e?.name === 'AuthRetryableFetchError'
+  || /failed to fetch|load failed|networkerror|network request failed|timeout|aborted|\b50[234]\b/i.test(errText(e));
+const isAuthErr = e => /PGRST30[123]|jwt expired|invalid jwt|refresh token|not authenticated|AuthSessionMissing|\b401\b/i.test(errText(e));
+let retryT = null, retryN = 0, authRetried = false;
+function retryLater() {
+  clearTimeout(retryT);
+  const wait = Math.min(5 * 60e3, 10e3 * 2 ** retryN++); // 10 秒、20 秒、40 秒… 最多 5 分鐘
+  cloud.retryAt = new Date(Date.now() + wait);
+  retryT = setTimeout(() => { if (!cloud.client) initCloud(); else sync(); }, wait);
+}
 
 export async function initCloud() {
   const cfg = getCloudConfig();
@@ -247,7 +339,7 @@ export async function initCloud() {
     setStatus(cloud.user ? 'idle' : 'signedout');
     if (cloud.user) sync();
   } catch (e) {
-    console.error(e); setStatus('error', '無法載入雲端模組（可能離線）');
+    console.error(e); setStatus('error', '連不上雲端，資料都安全存在這台裝置，稍後會自動再試', 'network'); retryLater();
   }
 }
 
@@ -266,6 +358,7 @@ export async function signOut() {
   if (cloud.client) await cloud.client.auth.signOut();
   cloud.user = null;
   // 登出後本機資料標記為未同步，避免下次登入別的帳號時被誤刪
+  entries = entries.filter(e => e.mine !== false); localStorage.removeItem('jz_book'); ownCache = null;
   entries.forEach(e => { e._dirty = true; delete e._synced; }); deleted = [];
   love.forEach(n => { n._dirty = true; delete n._synced; }); loveDeleted = [];
   save(K.entries, entries); save(K.deleted, deleted); save(K.love, love); save(K.loveDeleted, loveDeleted);
@@ -273,8 +366,24 @@ export async function signOut() {
   setStatus('signedout');
 }
 
-const toRow = e => ({ id: e.id, type: e.type, amount: e.amount, category: e.category, date: e.date, note: e.note, raw: e.raw, msg_id: e.msgId, created_at: e.createdAt, updated_at: e.updatedAt });
-const fromRow = r => ({ id: r.id, type: r.type, amount: Number(r.amount), category: r.category, date: r.date, note: r.note || '', raw: r.raw || '', msgId: r.msg_id || r.id, createdAt: r.created_at, updatedAt: r.updated_at, _synced: true });
+// 雲端還沒加新欄位（還沒重新執行 supabase.sql）時，先用舊格式同步，不讓記帳卡住
+let legacyCols = load('jz_legacy_cols', false);
+const META_KEYS = ['account', 'tags', 'fx', 'recurringId', 'paidBy'];
+const toRow = e => {
+  const r = { id: e.id, type: e.type, amount: e.amount, category: e.category, date: e.date, note: e.note, raw: e.raw, msg_id: e.msgId, created_at: e.createdAt, updated_at: e.updatedAt };
+  if (!legacyCols) { r.meta = Object.fromEntries(META_KEYS.filter(k => e[k] != null).map(k => [k, e[k]])); r.book_id = e.bookId || null; }
+  return r;
+};
+const fromRow = r => {
+  const e = { id: r.id, type: r.type, amount: Number(r.amount), category: r.category, date: r.date, note: r.note || '', raw: r.raw || '', msgId: r.msg_id || r.id, createdAt: r.created_at, updatedAt: r.updated_at, _synced: true };
+  const m = r.meta || {};
+  for (const k of META_KEYS) if (m[k] != null) e[k] = m[k];
+  if (r.book_id) e.bookId = r.book_id;
+  if (cloud.user && r.user_id && r.user_id !== cloud.user.id) { e.mine = false; e.userId = r.user_id; }
+  return e;
+};
+const isMissingCol = e => /PGRST204|42703|column .*(meta|book_id)|'(meta|book_id)' column/i.test(`${e?.code || ''} ${e?.message || ''}`);
+export const needsMigration = () => legacyCols;
 
 let syncTimer = null, syncing = false, again = false;
 function scheduleSync() { if (cloud.user) { clearTimeout(syncTimer); syncTimer = setTimeout(sync, 800); } }
@@ -286,9 +395,20 @@ export async function sync() {
   syncing = true; setStatus('syncing');
   try {
     const db = cloud.client.from('entries');
+    // 對方記在共同帳本的那筆：用 update 改（upsert 會被資料庫規則擋下）
+    for (const e of entries.filter(x => x._dirty && x.mine === false)) {
+      const { id, user_id, created_at, ...patch } = toRow(e);
+      const { error } = await db.update(patch).eq('id', id);
+      if (error) throw error;
+      e._dirty = false; e._synced = true;
+    }
     const dirty = entries.filter(e => e._dirty && !e.sample);
     if (dirty.length) {
-      const { error } = await db.upsert(dirty.map(toRow), { onConflict: 'id' });
+      let { error } = await db.upsert(dirty.map(toRow), { onConflict: 'id' });
+      if (error && !legacyCols && isMissingCol(error)) {
+        legacyCols = true; save('jz_legacy_cols', true);
+        ({ error } = await db.upsert(dirty.map(toRow), { onConflict: 'id' }));
+      }
       if (error) throw error;
       const ids = new Set(dirty.map(e => e.id));
       entries.forEach(e => { if (ids.has(e.id)) { e._dirty = false; e._synced = true; } });
@@ -306,17 +426,34 @@ export async function sync() {
       rows.push(...data);
       if (data.length < 1000) break;
     }
+    if (legacyCols && rows.length && 'meta' in rows[0]) { legacyCols = false; save('jz_legacy_cols', false); entries.forEach(e => { if (META_KEYS.some(k => e[k] != null) || e.bookId) e._dirty = true; }); again = true; }
+    // 只在本機的額外欄位（雲端是舊格式時）不要被蓋掉
+    const localMeta = new Map(entries.filter(e => META_KEYS.some(k => e[k] != null) || e.bookId).map(e => [e.id, e]));
     const stillDirty = entries.filter(e => e._dirty || e.sample); // 同步期間新增的 + 範例
     const dirtyIds = new Set(stillDirty.map(e => e.id));
-    entries = [...rows.map(fromRow).filter(e => !dirtyIds.has(e.id)), ...stillDirty];
+    entries = [...rows.map(fromRow).filter(e => !dirtyIds.has(e.id)).map(e => {
+      const l = localMeta.get(e.id);
+      if (!l || !legacyCols) return e;
+      for (const k of [...META_KEYS, 'bookId']) if (l[k] != null && e[k] == null) e[k] = l[k];
+      return e;
+    }), ...stillDirty];
+    ownCache = null;
     save(K.entries, entries); save(K.deleted, deleted);
     await syncExtras();
-    cloud.lastSync = new Date();
+    cloud.lastSync = new Date(); authRetried = false;
     setStatus('idle');
   } catch (e) {
     console.error(e);
-    const msg = /relation .*entries.* does not exist|Could not find the table/i.test(e.message || '') ? '資料表還沒建立，請先執行 supabase.sql' : (e.message || '同步失敗');
-    setStatus('error', msg);
+    if (/relation .*entries.* does not exist|Could not find the table/i.test(e.message || '')) setStatus('error', '資料表還沒建立，請先執行 supabase.sql', 'setup');
+    else if (isNetErr(e)) { setStatus('error', '網路不穩，資料都安全存在這台裝置，稍後會自動再試', 'network'); retryLater(); }
+    else if (isAuthErr(e)) {
+      // 先自己試著換新的登入憑證，真的不行才請你重新登入
+      let ok = false;
+      try { const { data, error } = await cloud.client.auth.refreshSession(); ok = !error && !!data?.session; } catch { /* 換不到 */ }
+      if (ok && !authRetried) { authRetried = true; again = true; }
+      else setStatus('error', '登入過期了，重新登入一次就好', 'auth');
+    }
+    else { setStatus('error', e.message || '同步失敗', 'other'); retryLater(); }
   } finally {
     syncing = false;
     if (again) { again = false; sync(); }
@@ -341,7 +478,10 @@ async function syncExtras() {
       const { error } = await db.from('profiles').upsert({ user_id: uid, data: collectPrefs(), updated_at: at }, { onConflict: 'user_id' });
       if (error) throw error;
       save(K.prefsMeta, { dirty: false, updatedAt: at });
-      if (getShare()) await db.from('love_shares').update({ ...shareSnapshot(), updated_at: at }).eq('user_id', uid);
+      if (getShare()) {
+        const { error: se } = await db.from('love_shares').update({ ...shareSnapshot(), updated_at: at }).eq('user_id', uid);
+        if (se && /anniv/.test(se.message || '')) { legacyLove = true; await db.from('love_shares').update({ ...shareSnapshot(), updated_at: at }).eq('user_id', uid); }
+      }
     }
 
     // 情話
@@ -360,26 +500,28 @@ async function syncExtras() {
     const { data: notes, error: le } = await db.from('love_notes').select('*').order('created_at').limit(2000);
     if (le) throw le;
     const before = new Map(love.map(n => [n.id, n]));
-    let hearts = 0, seen = 0;
+    let hearts = 0, seen = 0, replies = 0;
     const merged = notes.map(r => {
       const old = before.get(r.id);
       if (old && old._synced) {
         hearts += Math.max(0, (r.hearts || 0) - (old.hearts || 0));
         if (r.seen_at && !old.seenAt) seen++;
+        if (r.reply && r.reply !== old.reply) replies++;
       }
-      return { id: r.id, date: r.date, body: r.body, createdAt: r.created_at, updatedAt: r.updated_at, seenAt: r.seen_at, hearts: r.hearts || 0, heartedAt: r.hearted_at, _synced: true };
+      return { id: r.id, date: r.date, body: r.body, createdAt: r.created_at, updatedAt: r.updated_at, seenAt: r.seen_at, hearts: r.hearts || 0, heartedAt: r.hearted_at, reply: r.reply || null, repliedAt: r.replied_at || null, _synced: true };
     });
     const still = love.filter(n => n._dirty);
     const stillIds = new Set(still.map(n => n.id));
     love = [...merged.filter(n => !stillIds.has(n.id)), ...still];
     save(K.love, love); save(K.loveDeleted, loveDeleted);
-    loveNews.hearts += hearts; loveNews.seen += seen;
+    loveNews.hearts += hearts; loveNews.seen += seen; loveNews.replies += replies;
 
     // 分享連結（換裝置時找回）
     if (!getShare()) {
       const { data: sh } = await db.from('love_shares').select('token').eq('user_id', uid).maybeSingle();
       if (sh && sh.token) save(K.share, { token: sh.token });
     }
+    try { await refreshBook(); } catch (e) { console.warn('book', e); }
     cloud.extraError = null;
   } catch (e) {
     console.warn('extras', e);
@@ -387,5 +529,6 @@ async function syncExtras() {
   }
 }
 
-window.addEventListener('online', () => sync());
+window.addEventListener('online', () => { clearTimeout(retryT); if (!cloud.client) initCloud(); else sync(); });
+window.addEventListener('offline', () => { if (cloud.user) setStatus('offline'); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });

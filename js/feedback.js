@@ -2,18 +2,66 @@
 
 import { reduceMotion } from './charts.js';
 
-export function haptic(p = 12) { try { navigator.vibrate && navigator.vibrate(p); } catch { /* 不支援就算了 */ } }
+// 震動：Android 用 vibrate；iPhone（Safari 不支援 vibrate）改用 iOS 18 起「開關」元件內建的觸感回饋
+let iosSwitch = null, lastTick = 0;
+function iosTick() {
+  if (!iosSwitch) {
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.cssText = 'position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    const inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+    label.appendChild(inp); document.body.appendChild(label);
+    iosSwitch = label;
+  }
+  const now = Date.now();
+  if (now - lastTick < 60) return;
+  lastTick = now;
+  iosSwitch.click();
+}
+const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+export function haptic(p = 12) {
+  try {
+    if (canVibrate) { navigator.vibrate(p); return; }
+    iosTick();
+    // 有節奏的震動（例如 [18, 50, 18]）在 iPhone 上補第二下
+    if (Array.isArray(p) && p.length >= 3) setTimeout(iosTick, p[0] + p[1]);
+  } catch { /* 不支援就算了 */ }
+}
 
 // ---------- Toast ----------
-export function toast(msg, { icon = '✓', action, onAction, duration = 2600 } = {}) {
+// 一次只出現一則，其餘排隊；有「復原／還原」這類按鈕的優先插隊（那是你現在就要按的）
+const queue = [];
+let current = null;
+export function toast(msg, opts = {}) {
   const wrap = document.getElementById('toasts');
-  if (!wrap) return;
+  if (!wrap) return () => {};
+  const item = { msg, opts, at: Date.now() };
+  if (current && current.msg === msg) return current.close;
+  if (queue.some(q => q.msg === msg)) return () => {};
+  if (opts.action) {
+    if (current && !current.opts.action) { queue.unshift(current.item); current.close(true); }
+    else if (current) current.close();
+  } else if (current) {
+    queue.push(item); if (queue.length > 3) queue.splice(0, queue.length - 3);
+    return () => { const i = queue.indexOf(item); if (i >= 0) queue.splice(i, 1); };
+  }
+  return show(wrap, item);
+}
+function show(wrap, item) {
+  const { msg, opts: { icon = '✓', action, onAction } } = item;
+  let duration = item.opts.duration ?? 2600;
   const t = document.createElement('div');
   t.className = 'toast'; t.setAttribute('role', 'status');
   t.innerHTML = `<span class="t-ico">${icon}</span><span class="t-msg"></span>`;
   t.querySelector('.t-msg').textContent = msg;
-  let timer;
-  const close = () => { clearTimeout(timer); t.classList.add('out'); setTimeout(() => t.remove(), 260); };
+  let timer, closed = false;
+  const close = (silent = false) => {
+    if (closed) return; closed = true;
+    clearTimeout(timer); t.classList.add('out'); setTimeout(() => t.remove(), 260);
+    if (current && current.el === t) current = null;
+    if (!silent) setTimeout(next, 180);
+  };
   if (action) {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = action;
@@ -21,10 +69,28 @@ export function toast(msg, { icon = '✓', action, onAction, duration = 2600 } =
     t.appendChild(b);
     duration = Math.max(duration, 4500);
   }
-  while (wrap.children.length > 2) wrap.firstChild.remove();
+  t.addEventListener('click', e => { if (!e.target.closest('button')) close(); });
   wrap.appendChild(t);
+  current = { el: t, msg, opts: item.opts, item, close };
   timer = setTimeout(close, duration);
   return close;
+}
+function next() {
+  if (current) return;
+  // 排太久的就不放了，免得「已更新」在十秒後才跳出來
+  while (queue.length && Date.now() - queue[0].at > 6000 && !queue[0].opts.action) queue.shift();
+  const wrap = document.getElementById('toasts');
+  if (wrap && queue.length) show(wrap, queue.shift());
+}
+
+// 同一時間只放一場彩帶：剛放過就不再疊一場（例如記帳＋解鎖徽章同時發生）
+let lastBurst = 0;
+export function celebrate(opts = {}) {
+  const now = Date.now();
+  if (now - lastBurst < 2500) return false;
+  lastBurst = now;
+  confetti(opts);
+  return true;
 }
 
 // ---------- 彩帶 ----------

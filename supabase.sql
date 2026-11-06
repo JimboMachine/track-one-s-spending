@@ -1,4 +1,4 @@
--- 隨手記帳：Supabase 資料表（v1.1）
+-- 隨手記帳：Supabase 資料表（v1.3）
 -- 用法：Supabase 後台 → SQL Editor → New query → 貼上全部 → Run
 -- 可以重複執行：已經建立過的東西不會被清掉，只會補上新的部分。
 
@@ -97,6 +97,12 @@ create policy "own share" on public.love_shares for all using (auth.uid() = user
 -- 登入的人可以操作自己的資料（實際範圍由上面的規則限制）
 grant select, insert, update, delete on public.entries, public.profiles, public.love_notes, public.love_shares to authenticated;
 
+-- v1.3：她可以回一句話、紀念日倒數
+alter table public.love_notes add column if not exists reply text check (reply is null or char_length(reply) <= 500);
+alter table public.love_notes add column if not exists replied_at timestamptz;
+alter table public.love_shares add column if not exists anniv date;
+alter table public.love_shares add column if not exists anniv_label text not null default '';
+
 -- ========== 她打開連結時用的兩個功能 ==========
 -- 她不用登入：憑連結代碼只能讀到情話、你的暱稱和頭像，讀不到其他資料。
 
@@ -121,21 +127,25 @@ begin
 
   if p_mark then
     update public.love_notes set seen_at = now()
-     where user_id = s.user_id and seen_at is null;
+     where user_id = s.user_id and seen_at is null
+       and date <= (now() at time zone 'Asia/Taipei')::date;
   end if;
 
   return json_build_object(
     'name', s.name,
     'avatar', s.avatar,
     'accent', s.accent,
+    'anniv', s.anniv,
+    'anniv_label', s.anniv_label,
     'notes', coalesce((
       select json_agg(json_build_object(
                'id', n.id, 'date', n.date, 'body', n.body, 'created_at', n.created_at,
-               'seen', n.seen_at is not null, 'hearts', n.hearts)
+               'seen', n.seen_at is not null, 'hearts', n.hearts, 'reply', n.reply, 'replied_at', n.replied_at)
              order by n.date desc, n.created_at desc)
         from (
           select * from public.love_notes
            where user_id = s.user_id
+             and date <= (now() at time zone 'Asia/Taipei')::date   -- 排好的未來情話，到那天才看得到
            order by date desc, created_at desc
            limit 365
         ) n
@@ -179,3 +189,181 @@ revoke all on function public.love_feed(text, boolean) from public;
 revoke all on function public.love_heart(text, uuid, integer) from public;
 grant execute on function public.love_feed(text, boolean) to anon, authenticated;
 grant execute on function public.love_heart(text, uuid, integer) to anon, authenticated;
+
+
+-- 她回一句話（每則一句，可以改）
+create or replace function public.love_reply(p_token text, p_note uuid, p_body text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid;
+begin
+  if p_token is null or char_length(p_token) < 24 or p_body is null or char_length(trim(p_body)) = 0 or char_length(p_body) > 500 then
+    return false;
+  end if;
+  select user_id into uid from public.love_shares where token = p_token;
+  if uid is null then
+    return false;
+  end if;
+  update public.love_notes
+     set reply = trim(p_body), replied_at = now(), seen_at = coalesce(seen_at, now())
+   where id = p_note and user_id = uid and date <= (now() at time zone 'Asia/Taipei')::date;
+  return found;
+end;
+$$;
+revoke all on function public.love_reply(text, uuid, text) from public;
+grant execute on function public.love_reply(text, uuid, text) to anon, authenticated;
+
+-- 情話內容改過時，也把她的回覆清掉（她回的是舊版本）
+create or replace function public.love_notes_reset_seen()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.body is distinct from old.body then
+    new.seen_at := null;
+    new.reply := null;
+    new.replied_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+-- ========== v1.3：付款方式、標籤等額外欄位 ==========
+alter table public.entries add column if not exists meta jsonb not null default '{}'::jsonb;
+alter table public.entries add column if not exists book_id uuid;
+create index if not exists entries_book_idx on public.entries (book_id) where book_id is not null;
+
+-- ========== v1.3：兩人共同帳本 ==========
+create table if not exists public.books (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null default '我們的帳本' check (char_length(name) <= 30),
+  invite_code  text not null unique,
+  created_by   uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  created_at   timestamptz not null default now()
+);
+create table if not exists public.book_members (
+  book_id    uuid not null references public.books (id) on delete cascade,
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name       text not null default '' check (char_length(name) <= 40),
+  avatar     text not null default '' check (char_length(avatar) <= 16),
+  joined_at  timestamptz not null default now(),
+  primary key (book_id, user_id)
+);
+
+create or replace function public.is_book_member(p_book uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.book_members m where m.book_id = p_book and m.user_id = auth.uid());
+$$;
+revoke all on function public.is_book_member(uuid) from public;
+grant execute on function public.is_book_member(uuid) to authenticated;
+
+alter table public.books enable row level security;
+alter table public.book_members enable row level security;
+drop policy if exists "members read book" on public.books;
+drop policy if exists "owner edits book" on public.books;
+drop policy if exists "members read members" on public.book_members;
+drop policy if exists "edit own membership" on public.book_members;
+drop policy if exists "leave book" on public.book_members;
+create policy "members read book" on public.books for select using (public.is_book_member(id));
+create policy "owner edits book" on public.books for update using (created_by = auth.uid()) with check (created_by = auth.uid());
+create policy "members read members" on public.book_members for select using (public.is_book_member(book_id));
+create policy "edit own membership" on public.book_members for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "leave book" on public.book_members for delete using (user_id = auth.uid());
+grant select, update on public.books to authenticated;
+grant select, update, delete on public.book_members to authenticated;
+
+-- 記帳資料：自己的，加上自己所在共同帳本裡的
+drop policy if exists "own rows select" on public.entries;
+drop policy if exists "own rows insert" on public.entries;
+drop policy if exists "own rows update" on public.entries;
+drop policy if exists "own rows delete" on public.entries;
+create policy "own rows select" on public.entries for select
+  using (auth.uid() = user_id or (book_id is not null and public.is_book_member(book_id)));
+create policy "own rows insert" on public.entries for insert
+  with check (auth.uid() = user_id and (book_id is null or public.is_book_member(book_id)));
+create policy "own rows update" on public.entries for update
+  using (auth.uid() = user_id or (book_id is not null and public.is_book_member(book_id)))
+  with check ((auth.uid() = user_id and (book_id is null or public.is_book_member(book_id))) or (book_id is not null and public.is_book_member(book_id)));
+create policy "own rows delete" on public.entries for delete
+  using (auth.uid() = user_id or (book_id is not null and public.is_book_member(book_id)));
+
+-- 建立帳本（建立的人自動加入），回傳帳本 id
+create or replace function public.create_book(p_name text, p_member_name text default '', p_member_avatar text default '')
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  bid uuid;
+  code text;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  loop
+    code := upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
+    exit when char_length(code) = 6 and not exists (select 1 from public.books where invite_code = code);
+  end loop;
+  insert into public.books (name, invite_code, created_by) values (coalesce(nullif(trim(p_name), ''), '我們的帳本'), code, auth.uid())
+  returning id into bid;
+  insert into public.book_members (book_id, user_id, name, avatar) values (bid, auth.uid(), left(coalesce(p_member_name, ''), 40), left(coalesce(p_member_avatar, ''), 16));
+  return bid;
+end;
+$$;
+
+-- 用邀請碼加入（一本最多 6 人），回傳帳本 id；邀請碼不對回傳 null
+create or replace function public.join_book(p_code text, p_member_name text default '', p_member_avatar text default '')
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  bid uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  select id into bid from public.books where invite_code = upper(trim(p_code));
+  if bid is null then
+    return null;
+  end if;
+  if (select count(*) from public.book_members where book_id = bid) >= 6 and not public.is_book_member(bid) then
+    raise exception '這本帳本人數已滿';
+  end if;
+  insert into public.book_members (book_id, user_id, name, avatar)
+  values (bid, auth.uid(), left(coalesce(p_member_name, ''), 40), left(coalesce(p_member_avatar, ''), 16))
+  on conflict (book_id, user_id) do update set name = excluded.name, avatar = excluded.avatar;
+  return bid;
+end;
+$$;
+revoke all on function public.create_book(text, text, text) from public;
+revoke all on function public.join_book(text, text, text) from public;
+grant execute on function public.create_book(text, text, text) to authenticated;
+grant execute on function public.join_book(text, text, text) to authenticated;
+
+-- ========== v1.3：每日記帳提醒（推播） ==========
+create table if not exists public.push_subs (
+  endpoint    text primary key,
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  sub         jsonb not null,
+  remind_at   time not null default '21:00',
+  tz          text not null default 'Asia/Taipei',
+  last_sent   date,
+  created_at  timestamptz not null default now()
+);
+alter table public.push_subs enable row level security;
+drop policy if exists "own subs" on public.push_subs;
+create policy "own subs" on public.push_subs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+grant select, insert, update, delete on public.push_subs to authenticated;
