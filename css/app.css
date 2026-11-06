@@ -617,3 +617,92 @@ details.adv[open] summary { margin-bottom: 8px; }
 .li-seen { color: var(--love); font-weight: 600; }
 .dialog .love-input { min-height: 140px; }
 .dialog .linkish.danger { color: var(--danger); align-self: flex-start; font-size: 14px; }
+
+/* ===================== v1.2 ===================== */
+/* 1. 輸入區：沒打字時只有快捷鍵＋輸入框，打字時快捷鍵換成即時預覽 */
+.composer { gap: 8px; padding-block: 8px 10px; }
+.composer .preview { display: none; min-height: 32px; }
+.composer.typing .preview { display: flex; }
+.composer.typing .chips { display: none; }
+/* 2. 快捷鍵帶上次金額 */
+.chip.quick { padding-right: 6px; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.chip .c-amt { font-family: var(--font-display); font-size: 13px; color: var(--ink-2); background: var(--surface); border-radius: 99px; padding: 1px 7px; margin-left: 2px; font-variant-numeric: tabular-nums; }
+.chip:active .c-amt { background: transparent; }
+/* 送出鈕停用時是清楚的灰，不是半透明的綠（看起來像壞掉） */
+.send:disabled { opacity: 1; background: var(--surface-2); color: var(--muted); border: 1.5px solid var(--line); }
+
+/* 3. 同步狀態分級 */
+.sync-pill.muted { color: var(--ink-2); background: var(--surface-2); border-color: transparent; }
+.sync-pill.warn { color: #8a5a00; background: var(--gold-soft); border-color: transparent; }
+:root[data-theme="dark"] .sync-pill.warn { color: var(--gold); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sync-pill.warn { color: var(--gold); } }
+
+/* 4. Toast 改在輸入區上方出現，不擋住標題和同步狀態 */
+.toasts { top: auto; bottom: calc(var(--dock, 140px) + 10px); flex-direction: column-reverse; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(.95); } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(10px) scale(.97); } }
+
+/* 5. 左滑刪除、右滑編輯 */
+.rc-row { position: relative; overflow: hidden; touch-action: pan-y; }
+.rc-row > * { transition: transform .22s var(--ease-out); position: relative; z-index: 1; }
+.rc-row.swiping > * { transform: translateX(var(--dx, 0)); }
+.rc-row::before, .rc-row::after {
+  position: absolute; top: 0; bottom: 0; display: flex; align-items: center; font-size: 13px; font-weight: 700;
+  opacity: 0; transition: opacity .15s; pointer-events: none; border-radius: inherit; z-index: 0;
+}
+.rc-row::before { content: "🗑️ 刪除"; right: 0; left: 0; justify-content: flex-end; padding-right: 14px; background: var(--danger-soft); color: var(--danger); }
+.rc-row::after { content: "✏️ 編輯"; left: 0; right: 0; justify-content: flex-start; padding-left: 14px; background: var(--accent-soft); color: var(--accent-strong); }
+.rc-row.swiping { background: transparent; }
+.rc-row.swiping > * { background: var(--paper); }
+#detail-list .rc-row.swiping > *, #search-list .rc-row.swiping > * { background: var(--surface); }
+.rc-row.swiping.to-left::before, .rc-row.swiping.to-right::after { opacity: calc(.35 + var(--p, 0) * .65); }
+.rc-row.swiping.arm-del::before { background: var(--danger); color: #fff; }
+.rc-row.swiping.arm-edit::after { background: var(--accent); color: var(--on-accent); }
+.rc-row.gone > * { transform: translateX(-110%); opacity: 0; }
+
+/* 6. 搜尋 */
+.search-bar { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 14px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--line); transition: border-color .2s; }
+.search-bar:focus-within { border-color: var(--accent); }
+.search-bar > svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.search-bar input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 16px; height: 100%; color: var(--ink); }
+.search-bar input::-webkit-search-cancel-button { display: none; }
+.q-clear { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); flex: none; }
+.q-clear svg { width: 16px; height: 16px; }
+.view.searching .view-inner > :not(.search-bar):not(.search-card) { display: none; }
+.search-sum { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; color: var(--ink-2); padding-bottom: 8px; }
+.search-sum b { font-family: var(--font-display); font-weight: 400; font-size: 18px; color: var(--ink); }
+.search-sum small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* 7. 金額鍵盤 */
+.money-input .calc-res { font-family: var(--font-body); font-size: 15px; color: var(--accent-strong); white-space: nowrap; }
+.money-input.active { border-color: var(--accent); background: var(--surface); }
+.keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: -6px; animation: enter .22s var(--ease-out); }
+.keypad[hidden] { display: none; }
+.keypad button { height: 52px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); font-family: var(--font-display); font-size: 24px; color: var(--ink); display: grid; place-items: center; transition: transform .12s var(--ease-spring), background .12s; -webkit-user-select: none; user-select: none; }
+.keypad button:active { transform: scale(.93); background: var(--accent-soft); }
+.keypad .k-fn { color: var(--accent-strong); background: var(--accent-soft); border-color: transparent; }
+.keypad .k-fn svg { width: 24px; height: 24px; }
+.keypad .k-done { background: var(--accent); color: var(--on-accent); border-color: transparent; font-family: var(--font-body); font-size: 16px; font-weight: 700; }
+
+/* 8. 圖表頁首屏：沒設預算時只是一行提示；洞察卡可左右滑 */
+#budget-card.slim { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; }
+#budget-card.slim[hidden] { display: none; }
+#budget-card .slim-ico { font-size: 22px; }
+#budget-card .slim-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+#budget-card .slim-txt b { font-weight: 600; font-size: 14.5px; }
+#budget-card .slim-txt small { color: var(--muted); font-size: 12.5px; }
+.icon-btn.sm { width: 36px; height: 36px; border-radius: 11px; border: 0; background: transparent; color: var(--muted); }
+.icon-btn.sm svg { width: 18px; height: 18px; }
+.card h2 .linkish.sm { font-family: var(--font-body); font-size: 13px; margin-left: 6px; vertical-align: 2px; }
+.insights, .insights.n3 { display: flex; grid-template-columns: none; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  margin: 0 calc(var(--gutter-r) * -1) 0 calc(var(--gutter-l) * -1); padding: 0 var(--gutter-r) 2px var(--gutter-l); scroll-padding-left: var(--gutter-l); }
+.insights::-webkit-scrollbar { display: none; }
+.insights .insight, .insights.n3 .insight { flex: 0 0 calc((100% - var(--gutter-l) - var(--gutter-r) - 10px) / 2 - 14px); min-width: 140px; scroll-snap-align: start; padding: 12px 14px; }
+.insights.n1 .insight { flex-basis: calc(100% - var(--gutter-l) - var(--gutter-r)); }
+.insights.n2 .insight { flex-basis: calc((100% - var(--gutter-l) - var(--gutter-r) - 10px) / 2); }
+.insights.n3 .i-big { font-size: 19px; }
+.insights.n3 .i-txt { font-size: 13px; }
+.insight .i-big { overflow-wrap: anywhere; }
+.money-input input { width: 100%; }
+.dialog .money-input { min-width: 0; }
+.view.searching #budget-card, .view.searching .insights { display: none; }

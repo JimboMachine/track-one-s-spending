@@ -228,8 +228,18 @@ const DEFAULT_CLOUD = (window.JZ_CONFIG && window.JZ_CONFIG.supabaseUrl) ? { url
 export const getCloudConfig = () => load(K.cloud, null) || DEFAULT_CLOUD;
 export const setCloudConfig = cfg => { if (cfg) save(K.cloud, cfg); else localStorage.removeItem(K.cloud); };
 
-export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null, extraError: null };
-const setStatus = (s, err = null) => { cloud.status = s; cloud.error = err; emit(); };
+export const cloud = { client: null, user: null, status: 'off', lastSync: null, error: null, errorKind: null, extraError: null, retryAt: null };
+// errorKind：network（網路問題，會自動重試）、auth（登入過期，要重新登入）、setup（資料表沒建）、other
+const setStatus = (s, err = null, kind = null) => { cloud.status = s; cloud.error = err; cloud.errorKind = err ? (kind || 'other') : null; if (s !== 'error') { retryN = 0; cloud.retryAt = null; } emit(); };
+const isNetErr = e => !navigator.onLine || e instanceof TypeError || /failed to fetch|network|load failed|fetch|timeout|ECONN|abort|502|503|504/i.test(e?.message || String(e));
+const isAuthErr = e => /jwt|token|refresh|401|403|not authenticated|invalid claim|session/i.test(`${e?.message || ''} ${e?.code || ''} ${e?.status || ''}`);
+let retryT = null, retryN = 0;
+function retryLater() {
+  clearTimeout(retryT);
+  const wait = Math.min(5 * 60e3, 10e3 * 2 ** retryN++); // 10 秒、20 秒、40 秒… 最多 5 分鐘
+  cloud.retryAt = new Date(Date.now() + wait);
+  retryT = setTimeout(() => { if (!cloud.client) initCloud(); else sync(); }, wait);
+}
 
 export async function initCloud() {
   const cfg = getCloudConfig();
@@ -247,7 +257,7 @@ export async function initCloud() {
     setStatus(cloud.user ? 'idle' : 'signedout');
     if (cloud.user) sync();
   } catch (e) {
-    console.error(e); setStatus('error', '無法載入雲端模組（可能離線）');
+    console.error(e); setStatus('error', '連不上雲端，資料都安全存在這台裝置，稍後會自動再試', 'network'); retryLater();
   }
 }
 
@@ -315,8 +325,10 @@ export async function sync() {
     setStatus('idle');
   } catch (e) {
     console.error(e);
-    const msg = /relation .*entries.* does not exist|Could not find the table/i.test(e.message || '') ? '資料表還沒建立，請先執行 supabase.sql' : (e.message || '同步失敗');
-    setStatus('error', msg);
+    if (/relation .*entries.* does not exist|Could not find the table/i.test(e.message || '')) setStatus('error', '資料表還沒建立，請先執行 supabase.sql', 'setup');
+    else if (isNetErr(e)) { setStatus('error', '網路不穩，資料都安全存在這台裝置，稍後會自動再試', 'network'); retryLater(); }
+    else if (isAuthErr(e)) setStatus('error', '登入過期了，重新登入一次就好', 'auth');
+    else { setStatus('error', e.message || '同步失敗', 'other'); retryLater(); }
   } finally {
     syncing = false;
     if (again) { again = false; sync(); }
@@ -387,5 +399,6 @@ async function syncExtras() {
   }
 }
 
-window.addEventListener('online', () => sync());
+window.addEventListener('online', () => { clearTimeout(retryT); if (!cloud.client) initCloud(); else sync(); });
+window.addEventListener('offline', () => { if (cloud.user) setStatus('offline'); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
