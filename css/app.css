@@ -644,8 +644,9 @@ details.adv[open] summary { margin-bottom: 8px; }
 
 /* 5. 左滑刪除、右滑編輯 */
 .rc-row { position: relative; overflow: hidden; touch-action: pan-y; }
-.rc-row > * { transition: transform .22s var(--ease-out); position: relative; z-index: 1; }
-.rc-row.swiping > * { transform: translateX(var(--dx, 0)); }
+.rc-row { display: block; padding: 0; }
+.rc-in { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; padding: 7px 4px; border-radius: inherit; position: relative; z-index: 1; transition: transform .22s var(--ease-out), opacity .2s; }
+.rc-row.swiping .rc-in { transform: translateX(var(--dx, 0)); }
 .rc-row::before, .rc-row::after {
   position: absolute; top: 0; bottom: 0; display: flex; align-items: center; font-size: 13px; font-weight: 700;
   opacity: 0; transition: opacity .15s; pointer-events: none; border-radius: inherit; z-index: 0;
@@ -653,12 +654,12 @@ details.adv[open] summary { margin-bottom: 8px; }
 .rc-row::before { content: "🗑️ 刪除"; right: 0; left: 0; justify-content: flex-end; padding-right: 14px; background: var(--danger-soft); color: var(--danger); }
 .rc-row::after { content: "✏️ 編輯"; left: 0; right: 0; justify-content: flex-start; padding-left: 14px; background: var(--accent-soft); color: var(--accent-strong); }
 .rc-row.swiping { background: transparent; }
-.rc-row.swiping > * { background: var(--paper); }
-#detail-list .rc-row.swiping > *, #search-list .rc-row.swiping > * { background: var(--surface); }
+.rc-row.swiping .rc-in { background: var(--paper); box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+#detail-list .rc-row.swiping .rc-in, #search-list .rc-row.swiping .rc-in { background: var(--surface); }
 .rc-row.swiping.to-left::before, .rc-row.swiping.to-right::after { opacity: calc(.35 + var(--p, 0) * .65); }
 .rc-row.swiping.arm-del::before { background: var(--danger); color: #fff; }
 .rc-row.swiping.arm-edit::after { background: var(--accent); color: var(--on-accent); }
-.rc-row.gone > * { transform: translateX(-110%); opacity: 0; }
+.rc-row.gone .rc-in { transform: translateX(-110%); opacity: 0; }
 
 /* 6. 搜尋 */
 .search-bar { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 14px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--line); transition: border-color .2s; }

@@ -125,10 +125,10 @@ function groups() {
 function rowHTML(e, showDateTag = true, createdDay = null) {
   const c = categoryInfo(e.type, e.category);
   const tag = showDateTag && e.date !== createdDay ? `<span class="tag">${relDay(e.date)}</span>` : '';
-  return `<button class="rc-row${state.flash === e.id ? ' pop' : ''}" type="button" data-edit="${e.id}">
+  return `<button class="rc-row${state.flash === e.id ? ' pop' : ''}" type="button" data-edit="${e.id}"><span class="rc-in">
     <span class="rc-ico" aria-hidden="true">${c.icon}</span>
     <span class="rc-txt"><span class="rc-note">${esc(e.note)}</span><span class="rc-meta">${e.note === e.category ? (e.type === 'income' ? '收入' : '支出') : esc(e.category)}${tag}</span></span>
-    <span class="amt${e.type === 'income' ? ' inc' : ''}">${signed(e)}</span></button>`;
+    <span class="amt${e.type === 'income' ? ' inc' : ''}">${signed(e)}</span></span></button>`;
 }
 
 function groupHTML(g, isLast) {
@@ -327,6 +327,7 @@ const SLOT_DEFAULTS = {
   evening: [['🍲', '晚餐'], ['🛒', '全聯'], ['🚕', '計程車']],
   night: [['🍜', '宵夜'], ['🛍️', '蝦皮'], ['🚕', '計程車']],
 };
+const NOTE_ICON = { 早餐: '🍳', 早午餐: '🥞', 午餐: '🍱', 晚餐: '🍲', 宵夜: '🍜', 飲料: '🧋', 咖啡: '☕', 點心: '🍰', 捷運: '🚇', 公車: '🚌', 計程車: '🚕', 加油: '⛽', 全聯: '🛒', 蝦皮: '🛍️', 聚餐: '🍻' };
 const slotOfHour = h => (h >= 5 && h < 10 ? 'morning' : h >= 10 && h < 14 ? 'noon' : h >= 14 && h < 17 ? 'afternoon' : h >= 17 && h < 21 ? 'evening' : 'night');
 function quickChips() {
   const since = toISO(new Date(Date.now() - 60 * 864e5));
@@ -342,7 +343,7 @@ function quickChips() {
   }
   const top = [...cnt.values()].filter(v => v.n >= 2 || near(new Date(v.e.createdAt).getHours()))
     .sort((a, b) => b.score - a.score).slice(0, 7)
-    .map(v => ({ icon: categoryInfo(v.e.type, v.e.category).icon, note: v.e.note, amount: v.e.amount, income: v.e.type === 'income' }));
+    .map(v => ({ icon: NOTE_ICON[v.e.note] || categoryInfo(v.e.type, v.e.category).icon, note: v.e.note, amount: v.e.amount, income: v.e.type === 'income' }));
   const defs = [...SLOT_DEFAULTS[slotOfHour(nowH)], ['🍱', '午餐'], ['🍲', '晚餐'], ['🍳', '早餐'], ['🧋', '飲料'], ['🚇', '捷運'], ['🛒', '全聯'], ['🚕', '計程車']];
   for (const [icon, note] of defs) if (top.length < 7 && !top.some(t => t.note === note)) top.push({ icon, note });
   $('#quick-chips').innerHTML = top.map(t => {
@@ -703,7 +704,8 @@ function deleteWithUndo(id) {
     if (dx >= TH) setTimeout(() => openEdit(id), 60);
   };
   document.addEventListener('touchend', end);
-  document.addEventListener('touchcancel', end);
+  // 被系統打斷（來電、捲動接手）就當作沒滑過，不刪也不開
+  document.addEventListener('touchcancel', () => { if (!sw) return; const { row } = sw; sw = null; row.style.transition = ''; reset(row); });
   document.addEventListener('click', e => { if (suppressClick && e.target.closest('.rc-row')) { e.stopPropagation(); e.preventDefault(); } }, true);
 })();
 
