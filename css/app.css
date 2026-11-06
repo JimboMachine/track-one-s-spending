@@ -570,12 +570,12 @@ details.adv[open] summary { margin-bottom: 8px; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .emo { aspect-ratio: 1; border-radius: 12px; font-size: 22px; display: grid; place-items: center; background: var(--surface-2); border: 1.5px solid transparent; transition: transform .15s var(--ease-spring); }
 .emo.on { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.06); }
-.swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; }
 .sw-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); min-width: 0; }
 .sw-dot { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; font-size: 15px; box-shadow: 0 0 0 2px var(--surface); transition: box-shadow .2s, transform .2s var(--ease-spring); }
 .sw-btn.on .sw-dot { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); transform: scale(1.06); }
 .sw-btn.on { color: var(--ink); font-weight: 600; }
-.covers { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.covers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; }
 .cv-btn { display: flex; flex-direction: column; gap: 4px; align-items: center; font-size: 12px; color: var(--ink-2); min-width: 0; }
 .cv-btn .cover { height: 44px; width: 100%; border-radius: 10px; }
 .cv-btn.on .cover { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
@@ -822,3 +822,65 @@ html.sheet-open .toasts { top: calc(env(safe-area-inset-top, 0px) + 12px); botto
 .hero-link:active { background: rgba(255, 255, 255, .3); }
 .recap-img { display: block; width: 100%; border-radius: 14px; box-shadow: var(--shadow-sm); margin-top: 4px; }
 .acc-row:disabled .acc-bar i { background: var(--line); }
+
+/* ===== v1.4：最近刪除 ===== */
+.tr-list { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; margin: 4px -6px 0; padding: 0 6px; overscroll-behavior: contain; }
+.tr-row { display: grid; grid-template-columns: 24px 30px 1fr auto; align-items: center; gap: 10px; min-height: 52px; padding: 4px 2px; border-bottom: 1px dashed var(--line); cursor: pointer; }
+.tr-row:last-child { border-bottom: 0; }
+.tr-row input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.tr-row .amt { font-size: 16px; }
+.tr-row:has(input:not(:checked)) { opacity: .55; }
+.danger-link { color: var(--danger); }
+
+/* ===== v1.4：細節打磨 ===== */
+/* 小按鈕的可點範圍至少 44px（外觀不變） */
+.chip, .btn.sm, .seg button, .linkish, .icon-btn, .heart-sm { position: relative; }
+.chip::after, .btn.sm::after, .seg button::after, .linkish::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; height: 44px; transform: translateY(-50%); }
+/* 文字對比拉高：次要文字在白底也有 4.5:1 */
+:root:not([data-theme="dark"]) { --muted: #63716b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --muted: #8d9b95; } }
+:root[data-theme="dark"] { --muted: #8d9b95; }
+
+/* 桌機寬螢幕：左聊天、右圖表 */
+@media (min-width: 1100px) {
+  html.paired .app {
+    max-width: 1240px; display: grid;
+    grid-template-columns: minmax(380px, 440px) 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "top top" "strip stats" "chat stats" "comp stats" "tabs tabs";
+  }
+  html.paired .topbar { grid-area: top; }
+  html.paired .month-strip { grid-area: strip; }
+  html.paired .views { display: contents; }
+  html.paired #view-chat { grid-area: chat; position: relative; inset: auto; min-height: 0; border-right: 1px solid var(--line); }
+  html.paired #view-stats { grid-area: stats; position: relative; inset: auto; min-height: 0; background: var(--surface-2); }
+  html.paired #view-stats .view-inner { max-width: 760px; margin: 0 auto; width: 100%; }
+  html.paired .composer { grid-area: comp; border-right: 1px solid var(--line); }
+  html.paired .tabbar { grid-area: tabs; }
+  html.paired .tabbar .tab[data-view="stats"] { display: none; }
+  html.paired .tabbar { grid-template-columns: repeat(2, 1fr); }
+  html.paired .tab-ind { display: none; }
+  html.paired .tab[data-view="chat"].active, html.paired .tab[data-view="chat"] { color: var(--accent-strong); }
+  html.paired .tab[data-view="settings"]:not(.active) { color: var(--muted); }
+  .app { max-width: 1240px; }
+  html:not(.paired) .app { max-width: var(--col); }
+}
+
+/* ===== v1.4：三眼怪主題（原創外星小怪物） ===== */
+:root { --alien: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' opacity='1'%3E %3Cg stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'%3E%3Cpath d='M24 16 18 6'/%3E%3Cpath d='M40 16 46 6'/%3E%3C/g%3E %3Ccircle cx='18' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='46' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E %3Cpath d='M32 13c13.5 0 23 9.5 23 22.5C55 48 45 58 32 58S9 48 9 35.5C9 22.5 18.5 13 32 13z' fill='%238fdc4a' stroke='%2324501a' stroke-width='2.5'/%3E %3Ccircle cx='17.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E%3Ccircle cx='46.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E %3Ccircle cx='20.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='32' cy='26.5' r='7.4' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='43.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E %3Ccircle cx='21.4' cy='33' r='3' fill='%231d2433'/%3E%3Ccircle cx='33' cy='27.6' r='3.6' fill='%231d2433'/%3E%3Ccircle cx='44.4' cy='33' r='3' fill='%231d2433'/%3E %3Ccircle cx='22.4' cy='31.8' r='1' fill='%23fff'/%3E%3Ccircle cx='34.3' cy='26.2' r='1.2' fill='%23fff'/%3E%3Ccircle cx='45.4' cy='31.8' r='1' fill='%23fff'/%3E %3Cpath d='M25.5 45.5q6.5 5.5 13 0' stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E %3C/svg%3E"); }
+:root[data-accent="alien"] { --bg: #edf5e4; --surface-2: #f4f9ee; --line: #d9e8ca; --paper: #fffffa; --accent: #3a8212; --accent-strong: #2c660a; --accent-soft: #def1ca; --on-accent: #ffffff; --bubble: #3a8212; --hero-bg: #3b2a78; --gold: #ffd84d; --gold-soft: #fff4c2; --toast-act: #b8f27c; --toast-act-bg: rgba(255, 255, 255, .1); }
+@media (prefers-color-scheme: dark) { :root[data-accent="alien"]:not([data-theme="light"]) { --bg: #0a0e14; --surface: #121820; --surface-2: #19212b; --line: #26313d; --paper: #161e27; --accent: #9be15d; --accent-strong: #c2f48f; --accent-soft: #1d3212; --on-accent: #0b1903; --bubble: #4a8d1e; --hero-bg: #2c2062; --toast-act: #3a8212; --toast-act-bg: rgba(58, 130, 18, .14); } }
+:root[data-accent="alien"][data-theme="dark"] { --bg: #0a0e14; --surface: #121820; --surface-2: #19212b; --line: #26313d; --paper: #161e27; --accent: #9be15d; --accent-strong: #c2f48f; --accent-soft: #1d3212; --on-accent: #0b1903; --bubble: #4a8d1e; --hero-bg: #2c2062; --toast-act: #3a8212; --toast-act-bg: rgba(58, 130, 18, .14); }
+.cover[data-cover="alien"] { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='96' viewBox='0 0 120 96'%3E %3Cg opacity='.5'%3E%3Csvg x='8' y='10' width='34' height='34' viewBox='0 0 64 64'%3E %3Cg stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'%3E%3Cpath d='M24 16 18 6'/%3E%3Cpath d='M40 16 46 6'/%3E%3C/g%3E %3Ccircle cx='18' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='46' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E %3Cpath d='M32 13c13.5 0 23 9.5 23 22.5C55 48 45 58 32 58S9 48 9 35.5C9 22.5 18.5 13 32 13z' fill='%239be15d' stroke='%2324501a' stroke-width='2.5'/%3E %3Ccircle cx='17.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E%3Ccircle cx='46.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E %3Ccircle cx='20.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='32' cy='26.5' r='7.4' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='43.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E %3Ccircle cx='21.4' cy='33' r='3' fill='%231d2433'/%3E%3Ccircle cx='33' cy='27.6' r='3.6' fill='%231d2433'/%3E%3Ccircle cx='44.4' cy='33' r='3' fill='%231d2433'/%3E %3Ccircle cx='22.4' cy='31.8' r='1' fill='%23fff'/%3E%3Ccircle cx='34.3' cy='26.2' r='1.2' fill='%23fff'/%3E%3Ccircle cx='45.4' cy='31.8' r='1' fill='%23fff'/%3E %3Cpath d='M25.5 45.5q6.5 5.5 13 0' stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E %3C/svg%3E%3C/g%3E %3Cg opacity='.35'%3E%3Csvg x='72' y='52' width='24' height='24' viewBox='0 0 64 64'%3E %3Cg stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'%3E%3Cpath d='M24 16 18 6'/%3E%3Cpath d='M40 16 46 6'/%3E%3C/g%3E %3Ccircle cx='18' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='46' cy='6' r='3.6' fill='%23ffd84d' stroke='%2324501a' stroke-width='2'/%3E %3Cpath d='M32 13c13.5 0 23 9.5 23 22.5C55 48 45 58 32 58S9 48 9 35.5C9 22.5 18.5 13 32 13z' fill='%239be15d' stroke='%2324501a' stroke-width='2.5'/%3E %3Ccircle cx='17.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E%3Ccircle cx='46.5' cy='43' r='3.6' fill='%23ff9fb8' opacity='.55'/%3E %3Ccircle cx='20.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='32' cy='26.5' r='7.4' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E%3Ccircle cx='43.5' cy='32' r='6.2' fill='%23fff' stroke='%2324501a' stroke-width='2'/%3E %3Ccircle cx='21.4' cy='33' r='3' fill='%231d2433'/%3E%3Ccircle cx='33' cy='27.6' r='3.6' fill='%231d2433'/%3E%3Ccircle cx='44.4' cy='33' r='3' fill='%231d2433'/%3E %3Ccircle cx='22.4' cy='31.8' r='1' fill='%23fff'/%3E%3Ccircle cx='34.3' cy='26.2' r='1.2' fill='%23fff'/%3E%3Ccircle cx='45.4' cy='31.8' r='1' fill='%23fff'/%3E %3Cpath d='M25.5 45.5q6.5 5.5 13 0' stroke='%2324501a' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E %3C/svg%3E%3C/g%3E %3Cg fill='%23fff'%3E%3Ccircle cx='62' cy='18' r='1.4' opacity='.7'/%3E%3Ccircle cx='100' cy='12' r='1' opacity='.6'/%3E%3Ccircle cx='30' cy='70' r='1.2' opacity='.6'/%3E%3Ccircle cx='108' cy='44' r='1.6' opacity='.5'/%3E%3Ccircle cx='52' cy='86' r='1' opacity='.5'/%3E%3C/g%3E %3Cpath d='M88 26l2 4 4 1-4 1-2 4-2-4-4-1 4-1z' fill='%23ffd84d' opacity='.8'/%3E%3C/svg%3E") 0 0 / 120px 96px, radial-gradient(120% 140% at 100% 0%, rgba(155, 225, 93, .35) 0%, transparent 55%), var(--hero-bg); }
+.sw-dot.alien { background: var(--alien) center / 120% no-repeat, #e8f6d8 !important; color: transparent; box-shadow: inset 0 0 0 1.5px #3a8212; }
+.sw-btn.on .sw-dot.alien { box-shadow: inset 0 0 0 1.5px #3a8212, 0 0 0 3px var(--surface), 0 0 0 5px #3a8212; }
+/* 主題開著時：小幫手、Logo、首頁卡片都換成三眼怪 */
+:root[data-accent="alien"] .bot-ava { font-size: 0; background: var(--alien) center 60% / 112% no-repeat, var(--accent-soft); }
+:root[data-accent="alien"] .brand .logo { background: var(--alien) center 70% / 118% no-repeat, var(--accent-soft); }
+:root[data-accent="alien"] .brand .logo svg { opacity: 0; }
+:root[data-accent="alien"] .hero::after { width: 84px; height: 84px; right: 14px; top: 12px; border-radius: 0; background: var(--alien) center / contain no-repeat; transform: rotate(14deg); opacity: .95; animation: alienBob 3.6s ease-in-out infinite; }
+@keyframes alienBob { 0%, 100% { transform: rotate(14deg) translateY(0); } 50% { transform: rotate(10deg) translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { :root[data-accent="alien"] .hero::after { animation: none; } }
+:root[data-accent="alien"] .empty .big { font-size: 0; width: 56px; height: 56px; background: var(--alien) center / contain no-repeat; }
+.avatar svg.alien-svg, .emo svg.alien-svg, .tab-ava svg.alien-svg { width: 88%; height: 88%; }
+.emo svg.alien-svg { width: 1.25em; height: 1.25em; vertical-align: middle; }

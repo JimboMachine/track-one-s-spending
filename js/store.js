@@ -17,6 +17,30 @@ const emit = () => listeners.forEach(fn => fn());
 
 let entries = load(K.entries, []);
 let deleted = load(K.deleted, []);
+// 最近刪除：保留 30 天，隨時可以救回（只存在這台裝置）
+const TRASH_KEY = 'jz_trash', TRASH_DAYS = 30;
+let trash = load(TRASH_KEY, []).filter(t => Date.now() - Date.parse(t.deletedAt) < TRASH_DAYS * 864e5);
+const clean = e => { const c = { ...e }; delete c._synced; delete c._dirty; return c; };
+function toTrash(list) {
+  const at = new Date().toISOString();
+  const keep = list.filter(e => !e.sample && e.mine !== false);
+  if (!keep.length) return;
+  const ids = new Set(keep.map(e => e.id));
+  trash = [...keep.map(e => ({ ...clean(e), deletedAt: at })), ...trash.filter(t => !ids.has(t.id))].slice(0, 2000);
+  save(TRASH_KEY, trash);
+}
+export const getTrash = () => trash.filter(t => Date.now() - Date.parse(t.deletedAt) < TRASH_DAYS * 864e5);
+export function restoreFromTrash(ids) {
+  const set = new Set(ids);
+  const list = trash.filter(t => set.has(t.id)).map(t => { const e = { ...t }; delete e.deletedAt; return e; });
+  if (list.length) restoreEntries(list);
+  return list;
+}
+export function purgeTrash(ids) {
+  const set = ids ? new Set(ids) : null;
+  trash = set ? trash.filter(t => !set.has(t.id)) : [];
+  save(TRASH_KEY, trash); emit();
+}
 const persist = () => { ownCache = null; save(K.entries, entries); save(K.deleted, deleted); emit(); scheduleSync(); };
 
 // 自己的帳（包含自己記在共同帳本的）；對方記在共同帳本的另外用 getBookEntries 拿
@@ -52,6 +76,7 @@ export function updateEntry(id, patch) {
 
 export function deleteEntries(ids) {
   const set = new Set(ids);
+  toTrash(entries.filter(e => set.has(e.id)));
   entries.forEach(e => { if (set.has(e.id) && e._synced) deleted.push(e.id); });
   entries = entries.filter(e => !set.has(e.id));
   persist();
@@ -60,6 +85,7 @@ export function deleteEntries(ids) {
 export function restoreEntries(list) {
   const ids = new Set(list.map(e => e.id));
   deleted = deleted.filter(id => !ids.has(id));
+  if (trash.some(t => ids.has(t.id))) { trash = trash.filter(t => !ids.has(t.id)); save(TRASH_KEY, trash); }
   entries = entries.filter(e => !ids.has(e.id));
   entries.push(...list.map(e => ({ ...e, _dirty: !e.sample, updatedAt: new Date().toISOString() })));
   persist();
@@ -79,8 +105,11 @@ export function addSample(list) {
 export function clearSample() { entries = entries.filter(e => !e.sample); persist(); }
 
 export function clearAll() {
-  entries.forEach(e => { if (e._synced) deleted.push(e.id); });
-  entries = [];
+  // 只清自己的；共同帳本裡她記的那幾筆不能幫她刪掉
+  const mine = entries.filter(e => e.mine !== false);
+  toTrash(mine);
+  mine.forEach(e => { if (e._synced) deleted.push(e.id); });
+  entries = entries.filter(e => e.mine === false);
   persist();
 }
 

@@ -88,6 +88,7 @@ svg.h { fill: currentColor; display: block; }
   box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--love), var(--shadow);
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar .alien-svg { width: 86%; height: 86%; }
 .who { min-width: 0; }
 .who h1 { font: 22px/1.3 var(--font-display); margin: 0; word-break: break-word; }
 .who p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
@@ -488,6 +489,7 @@ svg.h { fill: currentColor; display: block; }
   function avatarHTML(f) {
     const a = f.avatar || '';
     if (/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(a)) return `<img src="${a}" alt="">`;
+    if (a === 'alien3') return "<svg class='alien-svg' aria-hidden='true' viewBox='0 0 64 64'> <g stroke='#24501a' stroke-width='2.5' stroke-linecap='round' fill='none'><path d='M24 16 18 6'/><path d='M40 16 46 6'/></g> <circle cx='18' cy='6' r='3.6' fill='#ffd84d' stroke='#24501a' stroke-width='2'/><circle cx='46' cy='6' r='3.6' fill='#ffd84d' stroke='#24501a' stroke-width='2'/> <path d='M32 13c13.5 0 23 9.5 23 22.5C55 48 45 58 32 58S9 48 9 35.5C9 22.5 18.5 13 32 13z' fill='#8fdc4a' stroke='#24501a' stroke-width='2.5'/> <circle cx='17.5' cy='43' r='3.6' fill='#ff9fb8' opacity='.55'/><circle cx='46.5' cy='43' r='3.6' fill='#ff9fb8' opacity='.55'/> <circle cx='20.5' cy='32' r='6.2' fill='#fff' stroke='#24501a' stroke-width='2'/><circle cx='32' cy='26.5' r='7.4' fill='#fff' stroke='#24501a' stroke-width='2'/><circle cx='43.5' cy='32' r='6.2' fill='#fff' stroke='#24501a' stroke-width='2'/> <circle cx='21.4' cy='33' r='3' fill='#1d2433'/><circle cx='33' cy='27.6' r='3.6' fill='#1d2433'/><circle cx='44.4' cy='33' r='3' fill='#1d2433'/> <circle cx='22.4' cy='31.8' r='1' fill='#fff'/><circle cx='34.3' cy='26.2' r='1.2' fill='#fff'/><circle cx='45.4' cy='31.8' r='1' fill='#fff'/> <path d='M25.5 45.5q6.5 5.5 13 0' stroke='#24501a' stroke-width='2.5' stroke-linecap='round' fill='none'/> </svg>";
     if (a) return esc(a.slice(0, 16));
     if (f.name) return esc([...f.name][0]);
     return '💌';
@@ -520,7 +522,7 @@ svg.h { fill: currentColor; display: block; }
 
   function replyHTML(n) {
     if (owner) return n.reply ? `<div class="reply-done"><span>💬 她回：</span>${esc(n.reply)}</div>` : '';
-    if (state.replying === n.id) return `<form class="reply-form" data-reply-form="${esc(n.id)}"><textarea maxlength="500" placeholder="回${esc(nameIn())}一句話…" aria-label="回覆">${esc(n.reply || '')}</textarea>
+    if (state.replying === n.id) return `<form class="reply-form" data-reply-form="${esc(n.id)}"><textarea maxlength="500" placeholder="回${esc(nameIn())}一句話…" aria-label="回覆">${esc(state.replyDraft != null ? state.replyDraft : (n.reply || ''))}</textarea>
       <div class="reply-act"><button type="button" class="btn-ghost" data-reply-cancel>取消</button><button type="submit" class="btn">送出 💌</button></div></form>`;
     if (n.reply) return `<button class="reply-done" type="button" data-reply="${esc(n.id)}"><span>💬 你回了：</span>${esc(n.reply)}<small>點一下修改</small></button>`;
     return `<button class="reply-btn" type="button" data-reply="${esc(n.id)}">💬 回${esc(nameIn())}一句話</button>`;
@@ -582,6 +584,9 @@ svg.h { fill: currentColor; display: block; }
 
   function render() {
     if (state.envBusy) return;
+    // 重畫前先記住她正在打的回覆，背景更新時才不會消失
+    const draftBox = document.querySelector('[data-reply-form] textarea');
+    if (draftBox && state.replying) state.replyDraft = draftBox.value;
     const f = state.feed;
     state.sig = JSON.stringify(f);
     const latest = f.notes[0];
@@ -733,8 +738,8 @@ svg.h { fill: currentColor; display: block; }
   document.addEventListener('click', e => {
     const t = e.target.closest('#env,[data-heart],[data-expand],[data-more],[data-refresh],[data-retry],[data-hint-off],[data-reply],[data-reply-cancel]');
     if (!t) return;
-    if (t.dataset.reply) { if (owner) { toast('預覽模式不能回覆', '👀'); return; } state.replying = t.dataset.reply; render(); const ta = $(`[data-reply-form="${t.dataset.reply}"] textarea`); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } return; }
-    if (t.hasAttribute('data-reply-cancel')) { state.replying = null; render(); return; }
+    if (t.dataset.reply) { if (owner) { toast('預覽模式不能回覆', '👀'); return; } state.replying = t.dataset.reply; state.replyDraft = null; render(); const ta = $(`[data-reply-form="${t.dataset.reply}"] textarea`); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } return; }
+    if (t.hasAttribute('data-reply-cancel')) { state.replying = null; state.replyDraft = null; render(); return; }
     if (t.id === 'env') openEnvelope();
     else if (t.dataset.heart) tapHeart(t.dataset.heart, t);
     else if (t.dataset.expand) {
@@ -766,7 +771,7 @@ svg.h { fill: currentColor; display: block; }
       const ok = await rpc('love_reply', { p_token: token, p_note: id, p_body: body });
       if (ok === false) throw new Error('fail');
       const n = findNote(id); if (n) n.reply = body;
-      state.replying = null; saveFeed(); render();
+      state.replying = null; state.replyDraft = null; saveFeed(); render();
       haptic([12, 40, 12]);
       toast(`送出了，${nameLead()}會收到 💌`, '💬');
     } catch (err) {
