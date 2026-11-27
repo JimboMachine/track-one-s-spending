@@ -2419,6 +2419,7 @@ const isWide = () => wideMQ.matches;
 const paired = () => isWide() && state.view !== 'settings';
 function setView(v) {
   if (!VIEWS.includes(v)) v = 'chat';
+  if (v === 'stats' && isWide()) v = 'chat'; // 寬螢幕上圖表本來就在右邊
   const changed = v !== state.view;
   state.view = v;
   tip(null);
@@ -2431,7 +2432,7 @@ function setView(v) {
   $('#composer').hidden = !(v === 'chat' || pair);
   $('#month-strip').hidden = !(v === 'chat' || pair);
   $('#view-title').textContent = TITLES[v];
-  if (pair && v === 'chat') renderStats(false);
+  if (pair && v === 'chat') { if (changed) state.animateStats = true; renderStats(); }
   if (v === 'stats') { if (changed) state.animateStats = true; renderStats(); $('#view-stats').scrollTop = changed ? 0 : $('#view-stats').scrollTop; }
   if (v === 'settings') {
     renderSettings(true); renderMe(changed);

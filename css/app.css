@@ -858,9 +858,11 @@ html.sheet-open .toasts { top: calc(env(safe-area-inset-top, 0px) + 12px); botto
   html.paired .composer { grid-area: comp; border-right: 1px solid var(--line); }
   html.paired .tabbar { grid-area: tabs; }
   html.paired .tabbar .tab[data-view="stats"] { display: none; }
-  html.paired .tabbar { grid-template-columns: repeat(2, 1fr); }
   html.paired .tab-ind { display: none; }
-  html.paired .tab[data-view="chat"].active, html.paired .tab[data-view="chat"] { color: var(--accent-strong); }
+  html.paired .tab[data-view="chat"]:not(.active) { color: var(--muted); }
+  html.paired .tab[data-view="chat"].active { color: var(--accent-strong); }
+  html.paired .tab[data-view="chat"] .tab-lbl::after { content: "・圖表"; }
+  html.paired .tabbar { justify-content: center; grid-template-columns: repeat(2, 180px); justify-content: center; }
   html.paired .tab[data-view="settings"]:not(.active) { color: var(--muted); }
   .app { max-width: 1240px; }
   html:not(.paired) .app { max-width: var(--col); }
